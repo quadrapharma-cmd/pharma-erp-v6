@@ -1912,6 +1912,8 @@ function coEnter(c){
     DB = raw ? JSON.parse(raw) : {...defaultDB};
     if(!DB._seq) DB._seq = {};
   } catch(e){ DB = {...defaultDB}; }
+  // Seed chart of accounts if new company
+  setTimeout(seedChartOfAccounts, 100);
 
   /* update sidebar branding */
   const ico = document.querySelector('.logo-icon');
@@ -8586,7 +8588,12 @@ function emptyState(icon, title, desc, btnLabel, btnAction){
 
 // دليل حسابات كامل للشركة الدوائية المصرية
 function getChartOfAccounts(){
-  const custom = getAll('chartOfAccounts');
+  return getAll('chartOfAccounts').sort((a,b)=>a.code.localeCompare(b.code));
+}
+
+// Seed chart of accounts on first use (called from coEnter)
+function seedChartOfAccounts(){
+  if(getAll('chartOfAccounts').length > 0) return; // already seeded
   const defaults = [
     // ── 1. الأصول المتداولة ──────────────────────────────────
     {code:'1101',name:'الصندوق - نقدية بالخزينة',           type:'asset',   category:'أصول متداولة', nature:'مدين'},
@@ -8696,12 +8703,9 @@ function getChartOfAccounts(){
     {code:'6601',name:'ضريبة الدخل',                       type:'expense', category:'ضرائب', nature:'مدين'},
     {code:'6602',name:'ضريبة الدمغة',                      type:'expense', category:'ضرائب', nature:'مدين'},
   ];
-
-  // Merge defaults with custom, custom overrides defaults with same code
-  const customCodes = new Set(custom.map(c=>c.code));
-  const filtered    = defaults.filter(d => !customCodes.has(d.code));
-  return [...filtered, ...custom].sort((a,b)=>a.code.localeCompare(b.code));
+  defaults.forEach(d => insert('chartOfAccounts', d));
 }
+
 
 // ── PAGES.chartofaccounts — كاملة مع تعديل ───────────────────
 PAGES.chartofaccounts = function(){
@@ -8747,12 +8751,12 @@ PAGES.chartofaccounts = function(){
             `<div><strong>${a.name}</strong>${isCustom?'<span class="badge b-blue" style="font-size:9px;margin-right:4px">مضاف</span>':''}</div>`,
             `<span class="badge ${typeColor[a.type]||'b-gray'}">${typeMap[a.type]||a.type}</span>`,
             a.nature?`<span class="${a.nature==='مدين'?'text-blue':'text-red'} fw7">${a.nature}</span>`:'—',
-            isCustom
+            a.id
               ?`<div class="action-bar">
-                  <button class="icon-btn edit" onclick="editAccount(${isCustom.id})">${ic.edit}</button>
-                  <button class="icon-btn del" onclick="if(confirm('حذف الحساب؟')){remove('chartOfAccounts',${isCustom.id});go('chartofaccounts')}">${ic.del}</button>
+                  <button class="icon-btn edit" onclick="editAccount(${a.id})">${ic.edit}</button>
+                  <button class="icon-btn del" onclick="if(confirm('حذف الحساب \''+a.name+'\'؟')){remove('chartOfAccounts',${a.id});go('chartofaccounts')}">${ic.del}</button>
                 </div>`
-              :'<span style="font-size:10px;color:var(--muted)">افتراضي</span>'
+              :'<span style="font-size:10px;color:var(--muted)">—</span>'
           );
         })
       )}</div>
@@ -8769,12 +8773,12 @@ PAGES.chartofaccounts = function(){
             `<span style="font-size:11px;color:var(--muted)">${a.category}</span>`,
             `<span class="badge ${typeColor[a.type]||'b-gray'}">${typeMap[a.type]||a.type}</span>`,
             a.nature?`<span class="${a.nature==='مدين'?'text-blue':'text-red'} fw7">${a.nature}</span>`:'—',
-            isCustom
+            a.id
               ?`<div class="action-bar">
-                  <button class="icon-btn edit" onclick="editAccount(${isCustom.id})">${ic.edit}</button>
-                  <button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('chartOfAccounts',${isCustom.id});go('chartofaccounts')}">${ic.del}</button>
+                  <button class="icon-btn edit" onclick="editAccount(${a.id})">${ic.edit}</button>
+                  <button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('chartOfAccounts',${a.id});go('chartofaccounts')}">${ic.del}</button>
                 </div>`
-              :'<span style="font-size:10px;color:var(--muted)">افتراضي</span>'
+              :'—'
           );
         })
       )}</div>
