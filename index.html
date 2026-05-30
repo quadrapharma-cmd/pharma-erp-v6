@@ -359,7 +359,7 @@ const defaultDB = {
   registrations:[], distributors:[], deliveryOrders:[], deliveryItems:[],
   expenses:[], employees:[], budgetLines:[], campaigns:[], salesTargets:[],
   receivables:[], payrollRuns:[], purchaseOrders:[], qualityChecks:[],
-  returns:[], contracts:[], assets:[], eInvoices:[], taxLines:[], batchMaterials:[], productIngredients:[], partnerAccounts:[], partnerEntries:[], journalEntries:[], chartOfAccounts:[],
+  returns:[], contracts:[], assets:[], eInvoices:[], taxLines:[], batchMaterials:[], productIngredients:[], partnerAccounts:[], partnerEntries:[], journalEntries:[], chartOfAccounts:[], historicalBalances:[],
   _seq:{}
 };
 
@@ -8374,50 +8374,6 @@ PAGES.shareholders = function(){
 };
 
 // ── HISTORICAL BALANCE — make it read-only display only ───────
-PAGES.historicalbalance = function(){
-  setPage('الموازين التاريخية — للعرض فقط',
-    'من ملفات ميديسنيا الأصلية 2012-2018 — للاستعراض والمقارنة',
-    `<button class="btn btn-white" onclick="go('journal')">← اليومية</button>`,
-    `<div class="alert alert-warn" style="margin-bottom:16px">
-      ${ic.warn}<div>هذه البيانات مستخرجة من ملفات ميديسنيا المالية الأصلية (2012–2018) للاستعراض فقط. البيانات الحية موجودة في صفحات التقارير والجاري.</div>
-    </div>
-    <div class="card">
-      <div class="card-head"><h2>📊 ميزان المراجعة التاريخي 2012–2018</h2>
-        <span style="font-size:12px;color:var(--muted)">بالجنيه المصري</span>
-      </div>
-      <div class="tbl-wrap"><table style="font-size:11px">
-        <thead>
-          <tr>
-            <th>الحساب</th>
-            <th colspan="2">2012</th><th colspan="2">2013</th>
-            <th colspan="2">2015</th><th colspan="2">2016</th>
-            <th colspan="2">2017</th>
-          </tr>
-          <tr>
-            <th></th>
-            ${['2012','2013','2015','2016','2017'].map(()=>'<th>مدين</th><th>دائن</th>').join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${[
-            ['الصندوق',     100000,18322, 321000,375750, 4414787,4391598, 4555382,4586081, 7892390,7841792],
-            ['البنك',        3000,309,   20000,22200,   2497289,2390776, 3489717,3296491, 2949992,3225439],
-            ['المصروفات',   15631,0,    273950,0,      717388,0,        703212,0,         756444,0],
-            ['جاري الشركاء',0,0,        0,329000,     0,2100050,        0,1284052,        0,3468115],
-            ['رأس المال',    0,100000,  0,100000,     0,100000,         0,100000,          0,100000],
-            ['أصول ثابتة',  0,0,        0,0,          1500000,0,        1500000,0,         1500000,0],
-          ].map((r,i)=>`<tr style="background:${i%2?'rgba(255,255,255,.02)':''}">
-            <td class="fw7">${r[0]}</td>
-            ${r.slice(1).map((v,j)=>`<td style="text-align:left;${v>0?(j%2===0?'color:var(--blue)':'color:var(--red)'):''}">${v>0?fmt(v):'—'}</td>`).join('')}
-          </tr>`).join('')}
-        </tbody>
-      </table></div>
-    </div>
-    <div style="text-align:center;padding:12px;font-size:11px;color:var(--muted)">
-      المصدر: ملفات ميديسنيا المالية الأصلية 2012-2018 | للاستعراض والمقارنة التاريخية فقط
-    </div>`
-  );
-};
 
 // ════════════════════════════════════════════════════════════════
 // REPORTS FIX — تقارير ذكية + حالة فارغة + مسح البيانات
@@ -9046,6 +9002,188 @@ function filterJournalType(type){
   const wrap = document.getElementById('journal-table-wrap');
   if(wrap) wrap.innerHTML = buildJournalTable(all);
 }
+
+PAGES.historicalbalance = function(){
+  const records = getAll('historicalBalances');
+  const years   = [...new Set(records.map(r=>r.year))].sort((a,b)=>a-b);
+  const accs    = [...new Set(records.map(r=>r.accountName))].sort();
+
+  setPage('الموازين التاريخية',
+    'إدخال وعرض موازين المراجعة للسنوات السابقة',
+    `<div style="display:flex;gap:8px">
+      <button class="btn btn-green" onclick="addHistoricalEntry()">${ic.plus} إضافة رصيد تاريخي</button>
+      <button class="btn btn-white" onclick="importHistoricalBulk()">📥 إدخال متعدد</button>
+      ${records.length?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="if(confirm('حذف كل الموازين التاريخية؟')){getAll(\'historicalBalances\').forEach(r=>remove(\'historicalBalances\',r.id));go(\'historicalbalance\')}">🗑 مسح الكل</button>`:''}
+    </div>`,
+    records.length === 0
+    ? `<div class="card"><div style="text-align:center;padding:40px">
+        <div style="font-size:48px;margin-bottom:12px">📜</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">لا توجد موازين تاريخية</div>
+        <div style="color:var(--muted);font-size:13px;margin-bottom:20px">أضف موازين المراجعة للسنوات السابقة لأغراض المقارنة والمراجعة</div>
+        <button class="btn btn-green" onclick="addHistoricalEntry()">${ic.plus} إضافة أول رصيد</button>
+        <div style="margin-top:12px"><button class="btn btn-white" onclick="importHistoricalBulk()">📥 إدخال متعدد (جدول)</button></div>
+      </div></div>`
+    : `
+    <!-- Pivot: اسم الحساب × السنة -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><h2>📊 ميزان المراجعة التاريخي</h2></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr>
+          <th>الحساب</th>
+          <th>النوع</th>
+          ${years.map(y=>`<th colspan="2">${y}</th>`).join('')}
+        </tr>
+        <tr>
+          <th></th><th></th>
+          ${years.map(()=>'<th>مدين</th><th>دائن</th>').join('')}
+        </tr></thead>
+        <tbody>
+          ${accs.map((acc,i)=>{
+            const accRecs = records.filter(r=>r.accountName===acc);
+            const type = accRecs[0]?.accountType||'';
+            const typeColor = {asset:'text-blue',liability:'text-red',equity:'text-green',revenue:'text-green',expense:'text-amber'}[type]||'';
+            return `<tr style="background:${i%2?'rgba(255,255,255,.02)':''}">
+              <td class="fw7">${acc}</td>
+              <td><span class="${typeColor}" style="font-size:11px">${
+                {asset:'أصول',liability:'التزامات',equity:'حقوق الملكية',revenue:'إيرادات',expense:'مصروفات'}[type]||'—'
+              }</span></td>
+              ${years.map(y=>{
+                const rec = accRecs.find(r=>r.year==y);
+                return `<td style="text-align:left;color:var(--blue)">${rec&&rec.debit>0?fmt(rec.debit)+' ج.م':'—'}</td>
+                        <td style="text-align:left;color:var(--red)">${rec&&rec.credit>0?fmt(rec.credit)+' ج.م':'—'}</td>`;
+              }).join('')}
+            </tr>`;
+          }).join('')}
+          <!-- الإجماليات -->
+          <tr style="background:rgba(46,160,67,.1);font-weight:700;border-top:2px solid var(--border)">
+            <td colspan="2">الإجمالي</td>
+            ${years.map(y=>{
+              const td = records.filter(r=>r.year==y).reduce((s,r)=>s+Number(r.debit||0),0);
+              const tc = records.filter(r=>r.year==y).reduce((s,r)=>s+Number(r.credit||0),0);
+              return `<td style="text-align:left" class="text-blue fw7">${fmt(td)} ج.م</td>
+                      <td style="text-align:left" class="text-red fw7">${fmt(tc)} ج.م</td>`;
+            }).join('')}
+          </tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <!-- جدول التفاصيل مع تعديل وحذف -->
+    <div class="card">
+      <div class="card-head"><h2>📋 تفاصيل الأرصدة</h2></div>
+      ${tbl(
+        ['السنة','الحساب','النوع','مدين (ج.م)','دائن (ج.م)','ملاحظات',''],
+        records.sort((a,b)=>a.year-b.year||a.accountName.localeCompare(b.accountName,'ar')).map(r=>tr(
+          `<span class="fw7">${r.year}</span>`,
+          r.accountName,
+          `<span style="font-size:11px;color:var(--muted)">${
+            {asset:'أصول',liability:'التزامات',equity:'حقوق الملكية',revenue:'إيرادات',expense:'مصروفات'}[r.accountType]||r.accountType||'—'
+          }</span>`,
+          r.debit>0?`<span class="text-blue fw7">${fmt(r.debit)} ج.م</span>`:'—',
+          r.credit>0?`<span class="text-red fw7">${fmt(r.credit)} ج.م</span>`:'—',
+          r.notes||'—',
+          `<div class="action-bar">
+            <button class="icon-btn edit" onclick="editHistoricalEntry(${r.id})">${ic.edit}</button>
+            <button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('historicalBalances',${r.id});go('historicalbalance')}">${ic.del}</button>
+          </div>`
+        ))
+      )}
+    </div>`
+  );
+};
+
+function historicalForm(r={}){
+  const accounts = getChartOfAccounts();
+  return `
+    <div class="form-row">
+      ${fg('السنة المالية *',inp('hb-year','number',r.year||new Date().getFullYear()-1,'مثال: 2022'))}
+      ${fg('نوع الحساب',sel('hb-type',[
+        {v:'asset',l:'أصول'},{v:'liability',l:'التزامات'},
+        {v:'equity',l:'حقوق الملكية'},{v:'revenue',l:'إيرادات'},{v:'expense',l:'مصروفات'}
+      ],r.accountType||'asset'))}
+    </div>
+    <div class="fg"><label>اسم الحساب *</label>
+      <input id="hb-acc" list="hb-acc-list" value="${r.accountName||''}"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:Cairo,sans-serif"
+        placeholder="اكتب أو اختر من الدليل...">
+      <datalist id="hb-acc-list">
+        ${accounts.map(a=>`<option value="${a.name}">`).join('')}
+      </datalist>
+    </div>
+    <div class="form-row">
+      ${fg('رصيد مدين (ج.م)',inp('hb-debit','number',r.debit||'','0'))}
+      ${fg('رصيد دائن (ج.م)',inp('hb-credit','number',r.credit||'','0'))}
+    </div>
+    ${fg('ملاحظات',inp('hb-notes','text',r.notes||'','اختياري'))}
+    <div class="form-actions">
+      <button class="btn btn-green" onclick="saveHistoricalEntry(${r.id||''})">💾 حفظ</button>
+      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+    </div>`;
+}
+
+function addHistoricalEntry(){
+  showModal(modal('➕ إضافة رصيد تاريخي', historicalForm()));
+}
+function editHistoricalEntry(id){
+  const r = getById('historicalBalances',id); if(!r) return;
+  showModal(modal('تعديل الرصيد التاريخي', historicalForm(r)));
+}
+function saveHistoricalEntry(id){
+  const acc  = document.getElementById('hb-acc')?.value?.trim();
+  const year = val('hb-year');
+  if(!acc||!year) return alert('يرجى تعبئة السنة واسم الحساب');
+  const debit  = Number(val('hb-debit')||0);
+  const credit = Number(val('hb-credit')||0);
+  if(!debit && !credit) return alert('يرجى إدخال رصيد مدين أو دائن');
+  const d = {
+    year:Number(year), accountName:acc,
+    accountType:val('hb-type'),
+    debit, credit, notes:val('hb-notes')||null
+  };
+  id ? update('historicalBalances',id,d) : insert('historicalBalances',d);
+  closeModal(); go('historicalbalance');
+}
+
+// إدخال متعدد — جدول بسيط
+function importHistoricalBulk(){
+  showModal(modal('📥 إدخال موازين متعددة',`
+    <div style="padding:10px;background:rgba(56,139,253,.08);border:1px solid rgba(56,139,253,.2);border-radius:8px;font-size:12px;margin-bottom:14px">
+      💡 أدخل أرصدة عدة حسابات في نفس الوقت. اكتب في كل سطر: السنة، اسم الحساب، نوعه، رصيد مدين، رصيد دائن (مفصولة بفاصلة)
+    </div>
+    <div style="margin-bottom:10px;font-size:12px;color:var(--muted)">مثال: 2022, الصندوق, asset, 50000, 0</div>
+    <textarea id="bulk-hb" rows="10" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;color:var(--text);font-family:monospace;direction:rtl"
+      placeholder="2022, الصندوق, asset, 50000, 0
+2022, البنك, asset, 120000, 0
+2022, رأس المال, equity, 0, 100000
+2022, موردون ودائنون, liability, 0, 35000"></textarea>
+    <div id="bulk-result" style="font-size:12px;min-height:20px;margin-top:8px"></div>
+    <div class="form-actions">
+      <button class="btn btn-green" onclick="processBulkHistorical()">💾 استيراد</button>
+      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+    </div>`));
+}
+
+function processBulkHistorical(){
+  const text = document.getElementById('bulk-hb')?.value||'';
+  const lines = text.trim().split('\n').filter(l=>l.trim());
+  let ok=0, errors=[];
+  lines.forEach((line,i)=>{
+    const parts = line.split(',').map(p=>p.trim());
+    if(parts.length < 4){ errors.push(`سطر ${i+1}: ناقص`); return; }
+    const [year, acc, type, debit, credit] = parts;
+    if(!year||!acc){ errors.push(`سطر ${i+1}: سنة أو حساب فارغ`); return; }
+    insert('historicalBalances',{
+      year:Number(year), accountName:acc,
+      accountType:type||'asset',
+      debit:Number(debit||0), credit:Number(credit||0)
+    });
+    ok++;
+  });
+  const res = document.getElementById('bulk-result');
+  if(res) res.innerHTML = `<span class="${errors.length?'text-amber':'text-green'}">تم استيراد ${ok} سجل${errors.length?' | أخطاء: '+errors.join(', '):' ✅'}</span>`;
+  if(ok > 0) setTimeout(()=>{ closeModal(); go('historicalbalance'); }, 1000);
+}
+
 
 // renderNav/go called by coEnter() after company is selected
 
