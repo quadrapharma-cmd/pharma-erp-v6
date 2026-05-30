@@ -4547,222 +4547,7 @@ function rejectBatch(orderId){
 // كل الأرقام بتيجي تلقائياً من بيانات ERP
 // ════════════════════════════════════════════════════════════════
 
-PAGES.reports = function(){
-  setPage('التقارير المالية الشاملة',
-    'كل الأرقام محسوبة تلقائياً من بيانات الشركة',
-    `<div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-green" onclick="exportFinancialExcel()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        تصدير Excel كامل
-      </button>
-      <button class="btn btn-white" onclick="window.print()">🖨️ طباعة</button>
-    </div>`,
-    buildFinancialReports()
-  );
-  initTabs();
-};
 
-// ── حساب كل الأرقام من DB ─────────────────────────────────────
-function calcFinancials(){
-  const dels    = getAll('deliveryOrders');
-  const items   = getAll('deliveryItems');
-  const exps    = getAll('expenses');
-  const pos     = getAll('productionOrders');
-  const inv     = getAll('inventory');
-  const mats    = getAll('materials');
-  const rcpts   = getAll('materialReceipts');
-  const emps    = getAll('employees').filter(e=>e.status==='active');
-  const budgets = getAll('budgetLines');
-  const assets  = getAll('assets');
-  const batchM  = getAll('batchMaterials');
-  const taxL    = getAll('taxLines');
-  const recvbl  = getAll('receivables');
-  const purOrds = getAll('purchaseOrders');
-  const payroll = getAll('payrollRuns');
-
-  // ── الإيرادات ──────────────────────────────────────────────
-  const deliveredOrders = dels.filter(d=>d.status==='delivered');
-  const totalRevenue    = deliveredOrders.reduce((s,d)=>s+Number(d.totalAmount||0),0);
-  const pendingRevenue  = dels.filter(d=>d.status==='pending').reduce((s,d)=>s+Number(d.totalAmount||0),0);
-  const returnedVal     = getAll('returns').reduce((s,r)=>s+Number(r.totalValue||0),0);
-  const netRevenue      = totalRevenue - returnedVal;
-
-  // ── تكلفة المبيعات (COGS) ──────────────────────────────────
-  // تكلفة المواد من التشغيلات الفعلية
-  const prodMatCost = batchM.reduce((s,m)=>s+Number(m.quantity||0)*Number(m.unitCostAtTime||0),0);
-  // تكلفة CMO
-  const cmoCost = pos.reduce((s,p)=>s+Number(p.cmoBaseCost||p.totalCost||0),0);
-  const cogs = prodMatCost + cmoCost;
-  const grossProfit = netRevenue - cogs;
-  const grossMargin = netRevenue > 0 ? grossProfit/netRevenue : 0;
-
-  // ── المصروفات ─────────────────────────────────────────────
-  const directExp   = exps.filter(e=>e.expenseType==='direct').reduce((s,e)=>s+Number(e.amount||0),0);
-  const indirectExp = exps.filter(e=>e.expenseType==='indirect').reduce((s,e)=>s+Number(e.amount||0),0);
-  // مصروفات تصنيف
-  const expByCat = {};
-  exps.forEach(e=>{
-    expByCat[e.category] = (expByCat[e.category]||0) + Number(e.amount||0);
-  });
-  const totalExp = directExp + indirectExp;
-
-  // الرواتب
-  const monthSalary = emps.reduce((s,e)=>s+Number(e.salary||0)+Number(e.allowances||0)-Number(e.deductions||0),0);
-  const lastPayroll = payroll.slice(-1)[0];
-
-  // ── صافي الربح ────────────────────────────────────────────
-  const totalCosts  = cogs + totalExp;
-  const netProfit   = netRevenue - totalCosts;
-  const netMargin   = netRevenue > 0 ? netProfit/netRevenue : 0;
-  const ebitda      = netProfit; // مبسط
-
-  // ── قائمة المركز المالي ───────────────────────────────────
-  // الأصول المتداولة
-  const invValue    = inv.reduce((s,i)=>s+Number(i.quantity||0)*Number(i.unitCost||0),0);
-  const cashEquiv   = 0; // من النقدية
-  const receivables = recvbl.filter(r=>r.status!=='محصّل').reduce((s,r)=>s+Number(r.amount||0),0);
-  const currentAssets = invValue + receivables + pendingRevenue;
-
-  // الأصول غير المتداولة
-  const fixedAssets = assets.reduce((s,a)=>s+Number(a.purchaseCost||0)-Number(a.accDepreciation||0),0);
-  const totalAssets = currentAssets + fixedAssets;
-
-  // الالتزامات
-  const supplierDebt = purOrds.filter(p=>p.status==='معلق').reduce((s,p)=>s+Number(p.totalAmount||0),0);
-  const taxLiab     = taxL.filter(t=>t.status==='معلق').reduce((s,t)=>s+Number(t.amount||0),0);
-  const totalLiab   = supplierDebt + taxLiab;
-  const equity      = totalAssets - totalLiab;
-
-  // ── VAT ──────────────────────────────────────────────────
-  const vatOut = deliveredOrders.reduce((s,d)=>s+Number(d.vatAmount||0),0);
-  const vatIn  = purOrds.filter(p=>p.status==='مستلم').reduce((s,p)=>s+Number(p.vatAmount||0),0);
-  const netVat = vatOut - vatIn;
-
-  // ── المخزون ───────────────────────────────────────────────
-  const rawMatValue = mats.reduce((s,m)=>s+Number(m.currentStock||0)*Number(m.unitCost||0),0);
-  const finishedVal = invValue;
-  const totalInvVal = rawMatValue + finishedVal;
-
-  // ── الإنتاج ───────────────────────────────────────────────
-  const totalProduced  = pos.reduce((s,p)=>s+Number(p.quantity||0),0);
-  const releasedBatches= pos.filter(p=>p.bprStatus==='released').length;
-  const pendingBatches = pos.filter(p=>p.bprStatus!=='released'&&p.bprStatus!=='rejected').length;
-  const avgUnitCost    = totalProduced > 0 ?
-    pos.reduce((s,p)=>s+Number(p.unitCost||0),0)/pos.filter(p=>Number(p.unitCost||0)>0).length : 0;
-
-  // ── المبيعات ─────────────────────────────────────────────
-  const distCount   = getAll('distributors').filter(d=>d.status==='active').length;
-  const topDist     = (() => {
-    const m = new Map();
-    deliveredOrders.forEach(o=>{
-      const d=getById('distributors',o.distributorId);
-      if(d) m.set(d.name,(m.get(d.name)||0)+Number(o.totalAmount||0));
-    });
-    return [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
-  })();
-
-  // ── الموازنة ─────────────────────────────────────────────
-  const totalBudget  = budgets.reduce((s,b)=>s+Number(b.budgetedAmount||0),0);
-  const budgetVarMap = {};
-  budgets.forEach(b=>{
-    const actual = expByCat[b.category]||0;
-    budgetVarMap[b.category] = {
-      budgeted: Number(b.budgetedAmount||0),
-      actual,
-      variance: Number(b.budgetedAmount||0) - actual,
-      pct: Number(b.budgetedAmount||0)>0 ? actual/Number(b.budgetedAmount||0) : 0
-    };
-  });
-
-  return {
-    // إيرادات
-    totalRevenue, pendingRevenue, returnedVal, netRevenue,
-    // تكلفة
-    prodMatCost, cmoCost, cogs, grossProfit, grossMargin,
-    // مصروفات
-    directExp, indirectExp, totalExp, expByCat,
-    monthSalary, lastPayroll,
-    // ربح
-    totalCosts, netProfit, netMargin, ebitda,
-    // ميزانية
-    invValue, rawMatValue, finishedVal, totalInvVal,
-    receivables, currentAssets, fixedAssets, totalAssets,
-    supplierDebt, taxLiab, totalLiab, equity,
-    // VAT
-    vatOut, vatIn, netVat,
-    // إنتاج
-    totalProduced, releasedBatches, pendingBatches, avgUnitCost,
-    // مبيعات
-    distCount, topDist,
-    // موازنة
-    totalBudget, budgetVarMap,
-    // موظفون
-    empCount: emps.length, monthSalary,
-    // ضرائب
-    taxLiab, taxL,
-  };
-}
-
-// ── بناء صفحة التقارير ────────────────────────────────────────
-function buildFinancialReports(){
-  const F = calcFinancials();
-  const prod = getAll('products').length;
-  const orders = getAll('productionOrders').length;
-
-  return `
-  <!-- TABS -->
-  <div class="tabs" style="flex-wrap:wrap">
-    <button class="tab active" data-group="rpt" data-tab="rpt-pl">📄 قائمة الدخل</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-bs">🏦 المركز المالي</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-cogs">🏭 تكلفة الإنتاج</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-exp">🧾 تحليل المصروفات</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-bud">💰 الميزانية مقابل الفعلي</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-inv">📦 قيمة المخزون</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-sales">🚚 تحليل المبيعات</button>
-    <button class="tab" data-group="rpt" data-tab="rpt-tax">🧾 الضرائب وVAT</button>
-  </div>
-
-  <!-- ══ قائمة الدخل ══ -->
-  <div id="rpt-pl" class="tab-pane" data-group="rpt">
-    ${reportPL(F)}
-  </div>
-
-  <!-- ══ المركز المالي ══ -->
-  <div id="rpt-bs" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportBS(F)}
-  </div>
-
-  <!-- ══ تكلفة الإنتاج ══ -->
-  <div id="rpt-cogs" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportCOGS(F)}
-  </div>
-
-  <!-- ══ تحليل المصروفات ══ -->
-  <div id="rpt-exp" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportExpenses(F)}
-  </div>
-
-  <!-- ══ الميزانية ══ -->
-  <div id="rpt-bud" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportBudget(F)}
-  </div>
-
-  <!-- ══ المخزون ══ -->
-  <div id="rpt-inv" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportInventory(F)}
-  </div>
-
-  <!-- ══ المبيعات ══ -->
-  <div id="rpt-sales" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportSales(F)}
-  </div>
-
-  <!-- ══ الضرائب ══ -->
-  <div id="rpt-tax" class="tab-pane" data-group="rpt" style="display:none">
-    ${reportTax(F)}
-  </div>
-  `;
-}
 
 // ── مساعد عرض السطر ──────────────────────────────────────────
 function plRow(label, value, cls='', indent=0, bold=false, borderTop=false){
@@ -7469,7 +7254,7 @@ function saveAccount(){
 // ════════════════════════════════════════════════════════════════
 
 function showBackupPanel(){
-  showModal(modal('💾 النسخ الاحتياطية',`
+  showModal(modal('💾 النسخ الاحتياطية والبيانات',`
     <div style="display:grid;gap:12px">
       <div style="padding:12px;background:rgba(46,160,67,.08);border:1px solid rgba(46,160,67,.2);border-radius:8px;font-size:12px">
         <strong>💡 الحل للمزامنة بين الأجهزة:</strong><br>
@@ -8815,6 +8600,169 @@ PAGES.historicalbalance = function(){
     </div>`
   );
 };
+
+// ════════════════════════════════════════════════════════════════
+// REPORTS FIX — تقارير ذكية + حالة فارغة + مسح البيانات
+// ════════════════════════════════════════════════════════════════
+
+// ── Override PAGES.reports with smart empty states ────────────
+PAGES.reports = function(){
+  const F = calcFinancials();
+  const hasData = F.totalRevenue > 0 || F.totalOpExp > 0 || F.cogs > 0 ||
+                  getAll('products').length > 0 || getAll('employees').length > 0;
+
+  setPage('التقارير المالية الشاملة',
+    hasData ? 'محسوبة تلقائياً من بيانات الشركة' : '⚠️ لا توجد بيانات مدخلة بعد',
+    `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-green" onclick="exportFinancialExcel()">📊 تصدير Excel</button>
+      <button class="btn btn-ghost btn-sm" onclick="showDataStatus()">🔍 حالة البيانات</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red)" onclick="showClearDataPanel()">🗑 مسح البيانات</button>
+    </div>`,
+    !hasData ? buildEmptyReportState() : buildFinancialReports()
+  );
+  initTabs();
+};
+
+// ── حالة فارغة مع خطوات للبدء ───────────────────────────────
+function buildEmptyReportState(){
+  const steps = [
+    { icon:'💊', title:'المنتجات', desc:'أضف منتجاتك الدوائية', page:'products', count: getAll('products').length },
+    { icon:'🏢', title:'الموزعون', desc:'أضف موزعيك وعملاءك', page:'distributors', count: getAll('distributors').length },
+    { icon:'🚚', title:'أوامر التوريد', desc:'سجل مبيعاتك ومبالغها', page:'deliveries', count: getAll('deliveryOrders').length },
+    { icon:'🧾', title:'المصروفات', desc:'سجل مصاريف الشركة', page:'expenses', count: getAll('expenses').length },
+    { icon:'👥', title:'الموظفون', desc:'أضف موظفيك وراتب كل موظف', page:'employees', count: getAll('employees').length },
+    { icon:'🧪', title:'المواد الخام', desc:'أضف موادك الخام والتغليف', page:'materials', count: getAll('materials').length },
+    { icon:'📋', title:'أوامر الإنتاج', desc:'سجل تشغيلات الإنتاج', page:'production', count: getAll('productionOrders').length },
+    { icon:'💰', title:'الميزانية', desc:'حدد أهداف الإنفاق', page:'budget', count: getAll('budgetLines').length },
+  ];
+
+  return `
+  <div style="max-width:700px;margin:0 auto;padding:20px 0">
+    <div style="text-align:center;padding:30px 20px 20px">
+      <div style="font-size:56px;margin-bottom:16px">📊</div>
+      <h2 style="font-size:22px;font-weight:700;margin-bottom:8px">التقارير المالية جاهزة</h2>
+      <p style="color:var(--muted);font-size:14px">لتظهر التقارير بشكل صحيح، أدخل بيانات شركتك أولاً في الخطوات التالية</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px">
+      ${steps.map(s=>`
+        <div onclick="go('${s.page}')" style="cursor:pointer;padding:14px 16px;background:var(--card);border:1px solid ${s.count>0?'rgba(46,160,67,.4)':'var(--border)'};border-radius:10px;display:flex;align-items:center;gap:12px;transition:.15s"
+          onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='${s.count>0?'rgba(46,160,67,.4)':'var(--border)'}'">
+          <span style="font-size:24px">${s.icon}</span>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:13px">${s.title}</div>
+            <div style="font-size:11px;color:var(--muted)">${s.desc}</div>
+          </div>
+          <span class="badge ${s.count>0?'b-green':'b-gray'}">${s.count>0?s.count+' ✅':'فارغ'}</span>
+        </div>`).join('')}
+    </div>
+
+    <div style="padding:14px 18px;background:rgba(56,139,253,.08);border:1px solid rgba(56,139,253,.2);border-radius:10px;font-size:13px">
+      <strong>💡 ملاحظة:</strong> التقارير تُحسب تلقائياً من بياناتك — لا حاجة لإدخال أي أرقام في التقارير مباشرةً.<br>
+      <span style="color:var(--muted)">مثلاً: إيرادات المبيعات = مجموع أوامر التوريد المسلّمة | صافي الربح = الإيرادات - المصروفات - تكلفة الإنتاج</span>
+    </div>
+  </div>`;
+}
+
+// ── حالة البيانات ────────────────────────────────────────────
+function showDataStatus(){
+  const tables = [
+    ['products','المنتجات','💊'],['materials','المواد الخام','🧪'],
+    ['cmos','المصانع CMO','🏭'],['productionOrders','أوامر الإنتاج','📋'],
+    ['batchMaterials','مواد التشغيلات','⚙️'],['inventory','المخزون','📦'],
+    ['distributors','الموزعون','🏢'],['deliveryOrders','أوامر التوريد','🚚'],
+    ['deliveryItems','بنود التوريد','📋'],['expenses','المصروفات','🧾'],
+    ['employees','الموظفون','👥'],['budgetLines','الميزانية','💰'],
+    ['assets','الأصول الثابتة','🏗️'],['taxLines','الضرائب','🏦'],
+    ['receivables','الذمم المدينة','💳'],['purchaseOrders','المشتريات','📦'],
+    ['partnerAccounts','الشركاء','🤝'],['partnerEntries','حركات الشركاء','📝'],
+    ['journalEntries','قيود اليومية','📒'],['salesTargets','أهداف المبيعات','🎯'],
+  ];
+
+  const co = document.getElementById('co-active-label')?.textContent || 'الشركة';
+  const rows = tables.map(([table, label, icon])=>{
+    const count = getAll(table).length;
+    return `<tr style="background:${count>0?'rgba(46,160,67,.04)':''}">
+      <td>${icon} ${label}</td>
+      <td style="text-align:center;font-weight:700;color:${count>0?'var(--green-light)':'var(--muted)'}">${count}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="go('${
+        {products:'products',materials:'materials',cmos:'cmos',productionOrders:'production',
+         batchMaterials:'production',inventory:'inventory',distributors:'distributors',
+         deliveryOrders:'deliveries',deliveryItems:'deliveries',expenses:'expenses',
+         employees:'employees',budgetLines:'budget',assets:'assets',taxLines:'taxes',
+         receivables:'receivables',purchaseOrders:'purchasing',partnerAccounts:'partners',
+         partnerEntries:'partners',journalEntries:'journal',salesTargets:'salesvstarget'}[table]||table
+      }');closeModal()">فتح</button></td>
+    </tr>`;
+  });
+
+  const total = tables.reduce((s,[t])=>s+getAll(t).length, 0);
+
+  showModal(modal(`🔍 حالة بيانات ${co}`, `
+    <div style="padding:10px;background:${total>0?'rgba(46,160,67,.08)':'rgba(248,81,73,.08)'};border:1px solid ${total>0?'rgba(46,160,67,.2)':'rgba(248,81,73,.2)'};border-radius:8px;margin-bottom:12px;font-size:13px">
+      <strong>${total>0?'✅':'⚠️'} إجمالي السجلات: ${total} سجل</strong>
+      ${total===0?' — الشركة فاضية، ابدأ بإدخال البيانات':''}
+    </div>
+    <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
+      <table style="font-size:12px;width:100%">
+        <thead><tr><th>الجدول</th><th>عدد السجلات</th><th></th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">إغلاق</button>
+    </div>`
+  ));
+}
+
+// ── مسح البيانات ──────────────────────────────────────────────
+function showClearDataPanel(){
+  const co = document.getElementById('co-active-label')?.textContent || 'الشركة';
+  showModal(modal('🗑 مسح بيانات الشركة', `
+    <div style="padding:14px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);border-radius:8px;margin-bottom:16px">
+      <strong style="color:var(--red)">⚠️ تحذير:</strong> هذا الإجراء سيمسح كل بيانات <strong>${co}</strong> بشكل نهائي ولا يمكن التراجع عنه.
+    </div>
+    <div style="margin-bottom:16px;font-size:13px;color:var(--muted)">
+      ننصح بتصدير Backup أولاً قبل المسح.
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="doExportBackup();closeModal()">⬇️ تصدير Backup أولاً</button>
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:12px">
+        <input type="checkbox" id="confirm-clear" style="width:16px;height:16px">
+        نعم، أريد مسح كل بيانات ${co} نهائياً
+      </label>
+      <button class="btn" style="background:var(--red);color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-family:Cairo,sans-serif"
+        onclick="if(document.getElementById('confirm-clear').checked){clearCompanyData()}else{alert('يرجى تأكيد المسح أولاً')}">
+        🗑 مسح كل البيانات
+      </button>
+      <button class="btn btn-ghost" onclick="closeModal()" style="margin-right:8px">إلغاء</button>
+    </div>`
+  ));
+}
+
+function clearCompanyData(){
+  // Reset DB to empty
+  Object.keys(DB).forEach(k=>{
+    if(k === '_seq') DB._seq = {};
+    else if(Array.isArray(DB[k])) DB[k] = [];
+  });
+  saveDB();
+  closeModal();
+  showNotif?.('✅ تم مسح كل بيانات الشركة بنجاح', 'success');
+  go('dashboard');
+}
+
+// ── Smart empty states in each report tab ────────────────────
+function emptyState(icon, title, desc, btnLabel, btnAction){
+  return `<div style="text-align:center;padding:40px 20px">
+    <div style="font-size:48px;margin-bottom:12px">${icon}</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:6px">${title}</div>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:16px">${desc}</div>
+    ${btnLabel ? `<button class="btn btn-green" onclick="${btnAction}">${btnLabel}</button>` : ''}
+  </div>`;
+}
 
 // renderNav/go called by coEnter() after company is selected
 
