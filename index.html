@@ -365,6 +365,13 @@ const defaultDB = {
 };
 
 let DB = loadDB();
+// Migration guard: ensure all tables exist
+['productIngredients','historicalBalances','appUsers','chartOfAccounts',
+ 'partnerAccounts','partnerEntries','journalEntries','receivables',
+ 'purchaseOrders','payrollRuns','qualityChecks','salesTargets'].forEach(function(t){
+  if(!Array.isArray(DB[t])) DB[t]=[];
+});
+if(!DB._seq) DB._seq={};
 
 function loadDB(){
   try{ const d=localStorage.getItem(STORE_KEY); return d?JSON.parse(d):{...defaultDB}; }
@@ -387,7 +394,7 @@ function getById(t,id){ return (DB[t]||[]).find(r=>r.id===id); }
 // ═══════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════
-const fmt=(n)=>Number(n||0).toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmt=(n)=>{ let num=Number(n); if(isNaN(num))num=0; return num.toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}); };
 const fmtN=(n)=>Number(n||0).toLocaleString('ar-EG');
 const today=()=>new Date().toISOString().slice(0,10);
 
@@ -1191,10 +1198,29 @@ function materialForm(m={}){
     </div>`;
 }
 function saveMaterial(id){
-  const name=val('m-name'); if(!name) return alert('يرجى كتابة اسم المادة');
-  const d={name,materialType:val('m-type'),unit:val('m-unit'),unitCost:val('m-cost')||null,reorderLevel:val('m-reorder')||null,supplier:val('m-supplier')||null,status:val('m-status')};
-  if(id) update('materials',id,d);
-  else insert('materials',{...d,currentStock:'0'});
+  const name = document.getElementById('m-name')?.value?.trim();
+  if(!name) return alert('يرجى كتابة اسم المادة');
+  const mtype = document.getElementById('m-type')?.value||'raw_material';
+  const d={
+    name, materialType:mtype,
+    unit:document.getElementById('m-unit')?.value||'كجم',
+    subType:mtype==='raw_material'?document.getElementById('m-subtype')?.value:document.getElementById('m-pkgtype')?.value,
+    currentStock:document.getElementById('m-stock')?.value||'0',
+    reorderLevel:document.getElementById('m-reorder')?.value||null,
+    unitCost:document.getElementById('m-cost')?.value||null,
+    status:document.getElementById('m-status')?.value||'active',
+    casNumber:document.getElementById('m-cas')?.value||null,
+    qualityGrade:document.getElementById('m-grade')?.value||null,
+    pharmacopoeialRef:document.getElementById('m-pharma')?.value||null,
+    specifications:document.getElementById('m-specs')?.value||null,
+    packagingSpec:document.getElementById('m-pkgspec')?.value||null,
+    storageCondition:document.getElementById('m-storage')?.value||null,
+    approvedSupplier:document.getElementById('m-supplier')?.value||null,
+    supplier:document.getElementById('m-supplier')?.value||null,
+    alternateSupplier:document.getElementById('m-supplier2')?.value||null,
+    qualityNotes:document.getElementById('m-qnotes')?.value||null
+  };
+  id?update('materials',id,d):insert('materials',d);
   closeModal(); go('materials');
 }
 function addMaterialReceipt(){
@@ -2492,51 +2518,7 @@ async function sendAIMessage(){
   if(!msg) return;
   input.value = '';
   appendAIMsg(msg,'user');
-  appendAIMsg('جاري التحليل...','assistant loading');
-
-  // Build context from DB
-  const dels=getAll('deliveryOrders'),exps=getAll('expenses'),pos=getAll('productionOrders'),inv=getAll('inventory');
-  const rev=dels.filter(d=>d.status==='delivered').reduce((s,d)=>s+Number(d.totalAmount||0),0);
-  const dc=exps.filter(e=>e.expenseType==='direct').reduce((s,e)=>s+Number(e.amount||0),0);
-  const ic2=exps.filter(e=>e.expenseType==='indirect').reduce((s,e)=>s+Number(e.amount||0),0);
-  const pc=pos.reduce((s,p)=>s+Number(p.totalCost||0),0);
-  const np=rev-dc-ic2-pc;
-  const ivVal=inv.reduce((s,i)=>s+Number(i.quantity||0)*Number(i.unitCost||0),0);
-
-  const context = `أنت مساعد مالي وإداري متخصص في شركة دوائية مصرية. هذه بيانات الشركة الحالية:
-- الشركة: ${document.getElementById('logo-name')?.textContent||'غير محدد'}
-- إجمالي الإيرادات: ${fmt(rev)} ج.م
-- تكاليف الإنتاج: ${fmt(pc)} ج.م
-- تكاليف مباشرة: ${fmt(dc)} ج.م
-- تكاليف غير مباشرة: ${fmt(ic2)} ج.م
-- صافي الربح: ${fmt(np)} ج.م
-- قيمة المخزون: ${fmt(ivVal)} ج.م
-- عدد المنتجات: ${getAll('products').length}
-- عدد الموظفين النشطين: ${getAll('employees').filter(e=>e.status==='active').length}
-- عدد الموزعين: ${getAll('distributors').length}
-- الذمم المعلقة: ${getAll('receivables').filter(r=>r.status==='معلق').length} ذمة
-- فواتير إلكترونية: ${getAll('eInvoices').length} فاتورة
-أجب بالعربية بشكل مختصر ومفيد. إذا سأل عن بيانات غير متوفرة قل ذلك بوضوح.`;
-
-  try{
-    const r = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        system: context,
-        messages:[{role:'user',content:msg}]
-      })
-    });
-    const data = await r.json();
-    const reply = data.content?.[0]?.text || 'عذراً، لم أتمكن من الإجابة.';
-    removeLoadingMsg();
-    appendAIMsg(reply,'assistant');
-  } catch(e){
-    removeLoadingMsg();
-    appendAIMsg('❌ خطأ في الاتصال — تأكد من الاتصال بالإنترنت.','assistant');
-  }
+  appendAIMsg('⚠️ المساعد الذكي يحتاج خادم وسيط (backend proxy) للعمل من المتصفح. يمكن تفعيله عبر تكامل API منفصل.','assistant');
 }
 
 function appendAIMsg(text, role){
@@ -8083,14 +8065,19 @@ function contractForm(c={}){
 }
 
 function saveContract(id){
-  const title=val('ct-title'), party=val('ct-party');
+  const title = document.getElementById('ct-title')?.value?.trim();
+  const party = document.getElementById('ct-party')?.value?.trim();
   if(!title||!party) return alert('يرجى تعبئة عنوان العقد والطرف الآخر');
   const d={
-    title, contractType:val('ct-type'), party,
-    startDate:val('ct-start')||null, endDate:val('ct-end')||null,
-    value:val('ct-val')||null, paymentMethod:val('ct-pay'),
-    distributorId:numVal('ct-dist')||null, cmoId:numVal('ct-cmo')||null,
-    contractNumber:val('ct-num')||null, status:val('ct-status'),
+    title, contractType:document.getElementById('ct-type')?.value||'supply',
+    party, startDate:document.getElementById('ct-start')?.value||null,
+    endDate:document.getElementById('ct-end')?.value||null,
+    value:document.getElementById('ct-val')?.value||null,
+    paymentMethod:document.getElementById('ct-pay')?.value||null,
+    distributorId:Number(document.getElementById('ct-dist')?.value||0)||null,
+    cmoId:Number(document.getElementById('ct-cmo')?.value||0)||null,
+    contractNumber:document.getElementById('ct-num')?.value||null,
+    status:document.getElementById('ct-status')?.value||'active',
     notes:document.getElementById('ct-notes')?.value||null
   };
   id?update('contracts',id,d):insert('contracts',d);
@@ -8130,12 +8117,18 @@ function partnerForm(p={}){
 }
 
 function savePartner(id){
-  const name=val('pt-name'); if(!name) return alert('يرجى كتابة اسم الشريك');
+  const name = document.getElementById('pt-name')?.value?.trim();
+  if(!name) return alert('يرجى كتابة اسم الشريك');
   const d={
-    name, role:val('pt-role'), type:val('pt-type'),
-    ownershipPct:val('pt-pct')||null, nationalId:val('pt-id')||null,
-    phone:val('pt-phone')||null, email:val('pt-email')||null,
-    address:val('pt-addr')||null, notes:val('pt-notes')||null
+    name,
+    role:document.getElementById('pt-role')?.value||'managing_partner',
+    type:document.getElementById('pt-type')?.value||'current',
+    ownershipPct:document.getElementById('pt-pct')?.value||null,
+    nationalId:document.getElementById('pt-id')?.value||null,
+    phone:document.getElementById('pt-phone')?.value||null,
+    email:document.getElementById('pt-email')?.value||null,
+    address:document.getElementById('pt-addr')?.value||null,
+    notes:document.getElementById('pt-notes')?.value||null
   };
   id?update('partnerAccounts',id,d):insert('partnerAccounts',d);
   closeModal(); go('partners');
