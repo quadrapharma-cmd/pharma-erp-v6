@@ -568,21 +568,29 @@ function renderNav(){
   let html=''; let lastSection='';
   navItems.forEach(n=>{
     if(n.section!==lastSection){ html+=`<div class="nav-section">${n.section}</div>`; lastSection=n.section; }
-    html+=`<div class="nav-item ${currentPage===n.id?'active':''}" onclick="go('${n.id}')"><span class="icon">${n.icon}</span><span>${n.label}</span></div>`;
+    html+=`<div class="nav-item ${currentPage===n.id?'active':''}" data-page="${n.id}" onclick="go('${n.id}')"><span class="icon">${n.icon}</span><span>${n.label}</span></div>`;
   });
   setHTML('nav-menu',html);
 }
 
 function go(page){
+  // Auth check
+  if(typeof _authUser !== 'undefined' && _authUser && page && page !== 'dashboard'){
+    if(typeof _canAccess === 'function' && !_canAccess(page)){
+      if(typeof showNotif === 'function') showNotif('ليس لديك صلاحية هذه الصفحة','error');
+      page = 'dashboard';
+    }
+  }
   currentPage=page;
   renderNav();
   closeModal();
   (PAGES[page]||PAGES.dashboard)();
-  // UX refresh
+  // Filter nav + UX refresh
   setTimeout(()=>{
-    const alerts=getDashboardAlerts?.();
+    if(typeof _filterNav === 'function') _filterNav();
+    const alerts = typeof getDashboardAlerts === 'function' ? getDashboardAlerts() : null;
     if(alerts){const b=document.getElementById('alerts-badge');if(b){b.textContent=alerts.length||'';b.style.display=alerts.length?'flex':'none';}}
-  },300);
+  },200);
 }
 
 // ═══════════════════════════════════════════════
@@ -9350,36 +9358,15 @@ function _updateBadge(){
 function _filterNav(){
   if(!_authUser) return;
   try{
-    document.querySelectorAll('[data-page]').forEach(el=>{
-      const page = el.dataset.page;
+    document.querySelectorAll('[data-page]').forEach(function(el){
+      var page = el.dataset.page;
       if(page) el.style.display = _canAccess(page) ? '' : 'none';
-    });
-    // Also filter nav-item elements
-    document.querySelectorAll('.nav-item').forEach(el=>{
-      const onclick = el.getAttribute('onclick')||'';
-      const m = onclick.match(/go\(['"](\w+)['"]\)/);
-      if(m && m[1]) el.style.display = _canAccess(m[1]) ? '' : 'none';
     });
   }catch(e){}
 }
 
-// Patch go() to add permission check — no recursion
-const _origGo = (function(){
-  // Capture reference to the REAL go before any override
-  return window.go || function(page){
-    currentPage=page; renderNav(); closeModal(); (PAGES[page]||PAGES.dashboard)();
-  };
-})();
-
-// Redefine go with permission check
-go = function(page){
-  if(_authUser && page && page!=='dashboard' && !_canAccess(page)){
-    showNotif && showNotif('⛔ ليس لديك صلاحية هذه الصفحة','error');
-    _origGo('dashboard'); return;
-  }
-  _origGo(page);
-  setTimeout(_filterNav, 100);
-};
+// Auth: permission check is done inside go() directly
+// _filterNav is called after each navigation
 
 // Override coEnter to restore session or show login
 const _origCoEnterFlow = _showLoginScreen;
