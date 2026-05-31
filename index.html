@@ -18,7 +18,7 @@
 body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;font-size:14px}
 
 /* SIDEBAR */
-aside{width:240px;background:var(--sidebar);border-left:1px solid var(--border);display:none;flex-direction:column;position:fixed;top:0;right:0;height:100vh;z-index:100;overflow-y:auto}
+aside{width:240px;background:var(--sidebar);border-left:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;right:0;height:100vh;z-index:100;overflow-y:auto}
 .logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
 .logo-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#2ea043,#1a7f37);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#fff;flex-shrink:0;box-shadow:0 0 20px rgba(46,160,67,.3)}
 .logo-text .t1{font-weight:700;font-size:14px;line-height:1.2;color:var(--text)}
@@ -32,7 +32,7 @@ nav{flex:1;padding:10px 8px;overflow-y:auto}
 .sidebar-footer{padding:14px 16px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:11px}
 
 /* MAIN */
-main{margin-right:240px;flex:1;display:none;flex-direction:column;min-height:100vh}
+main{margin-right:240px;flex:1;display:flex;flex-direction:column;min-height:100vh}
 .topbar{background:var(--sidebar);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
 .topbar-left h1{font-size:20px;font-weight:700;color:var(--text)}
 .topbar-left p{font-size:12px;color:var(--muted);margin-top:2px}
@@ -330,7 +330,6 @@ strong{font-weight:700;color:var(--text)}
         🔔
         <span id="alerts-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border-radius:99px;font-size:10px;font-weight:700;min-width:16px;height:16px;align-items:center;justify-content:center;padding:0 4px;font-family:'Cairo',sans-serif"></span>
       </button>
-      <div id="user-badge" style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:default"></div>
       <button class="co-switch-btn" id="co-switch-btn" onclick="coShowScreen()">
         🏢 <span id="co-active-label">الشركة</span>
       </button>
@@ -360,7 +359,7 @@ const defaultDB = {
   registrations:[], distributors:[], deliveryOrders:[], deliveryItems:[],
   expenses:[], employees:[], budgetLines:[], campaigns:[], salesTargets:[],
   receivables:[], payrollRuns:[], purchaseOrders:[], qualityChecks:[],
-  returns:[], contracts:[], assets:[], eInvoices:[], taxLines:[], batchMaterials:[], productIngredients:[], partnerAccounts:[], partnerEntries:[], journalEntries:[], chartOfAccounts:[], historicalBalances:[], appUsers:[],
+  returns:[], contracts:[], assets:[], eInvoices:[], taxLines:[], batchMaterials:[], productIngredients:[], partnerAccounts:[], partnerEntries:[], journalEntries:[], chartOfAccounts:[], historicalBalances:[],
   _seq:{}
 };
 
@@ -561,7 +560,6 @@ const navItems=[
   {id:'vat',icon:'🧾',label:'ضريبة القيمة المضافة',sec:'الضرائب'},
   {id:'einvoice',icon:'📄',label:'الفواتير الإلكترونية',sec:'الضرائب'},
   {id:'taxes',icon:'🏦',label:'الضرائب العامة',sec:'الضرائب'},
-  {id:'users',icon:'👥',label:'المستخدمون والصلاحيات',sec:'الإعدادات'},
 ];
 
 function renderNav(){
@@ -1933,17 +1931,7 @@ function coEnter(c){
   /* hide selector, show app */
   document.getElementById('co-screen').style.display = 'none';
   renderNav();
-  // Show login if no active session
-  if(!restoreSession()){
-    showLoginScreen();
-  } else {
-    const sidebarEl = document.querySelector('aside');
-    const mainEl    = document.querySelector('main');
-    if(sidebarEl) sidebarEl.style.display = 'flex';
-    if(mainEl)    mainEl.style.display    = 'flex';
-    updateUserBadge();
-    go('dashboard');
-  }
+  go('dashboard');
 }
 
 /* ── show selector ── */
@@ -9194,439 +9182,6 @@ function processBulkHistorical(){
   const res = document.getElementById('bulk-result');
   if(res) res.innerHTML = `<span class="${errors.length?'text-amber':'text-green'}">تم استيراد ${ok} سجل${errors.length?' | أخطاء: '+errors.join(', '):' ✅'}</span>`;
   if(ok > 0) setTimeout(()=>{ closeModal(); go('historicalbalance'); }, 1000);
-}
-
-
-// ════════════════════════════════════════════════════════════════
-// AUTH SYSTEM — نظام الصلاحيات والمستخدمين
-// ════════════════════════════════════════════════════════════════
-
-// ── الأدوار المتاحة ───────────────────────────────────────────
-const ROLES = {
-  admin: {
-    label: 'مدير النظام (Admin)',
-    color: '#e74c3c',
-    icon: '👑',
-    modules: '*', // كل الموديولات
-  },
-  finance: {
-    label: 'مدير مالي',
-    color: '#2980b9',
-    icon: '💰',
-    modules: ['dashboard','reports','expenses','budget','payroll','employees',
-              'journal','trialbalance','chartofaccounts','historicalbalance',
-              'partners','shareholders','purchasing','receivables','assets',
-              'vat','taxes','einvoice','costanalysis','contracts','marketing'],
-  },
-  production: {
-    label: 'مدير الإنتاج',
-    color: '#27ae60',
-    icon: '🏭',
-    modules: ['dashboard','products','materials','cmos','production','quality',
-              'bom','batchrecords','inventory','expiry','registration'],
-  },
-  sales: {
-    label: 'مدير المبيعات',
-    color: '#8e44ad',
-    icon: '🚚',
-    modules: ['dashboard','distributors','deliveries','returns','receivables',
-              'salesvstarget','products','inventory','registration'],
-  },
-  warehouse: {
-    label: 'أمين المخزن',
-    color: '#e67e22',
-    icon: '📦',
-    modules: ['dashboard','inventory','expiry','materials','products'],
-  },
-  accountant: {
-    label: 'محاسب',
-    color: '#16a085',
-    icon: '🧾',
-    modules: ['dashboard','expenses','budget','payroll','purchasing',
-              'receivables','journal','trialbalance','chartofaccounts',
-              'vat','taxes','einvoice','reports'],
-  },
-  viewer: {
-    label: 'مشاهدة فقط',
-    color: '#7f8c8d',
-    icon: '👁',
-    modules: ['dashboard','reports'],
-    readonly: true,
-  },
-};
-
-// ── حالة الجلسة ───────────────────────────────────────────────
-let _currentUser = null;
-
-// ── تحميل وحفظ المستخدمين ─────────────────────────────────────
-function getUsers(){
-  return getAll('appUsers');
-}
-
-function getCurrentUser(){
-  return _currentUser;
-}
-
-function canAccess(moduleId){
-  if(!_currentUser) return false;
-  const role = ROLES[_currentUser.role];
-  if(!role) return false;
-  if(role.modules === '*') return true;
-  return role.modules.includes(moduleId);
-}
-
-function isReadOnly(){
-  if(!_currentUser) return true;
-  return ROLES[_currentUser.role]?.readonly === true;
-}
-
-// ════════════════════════════════════════════════════════════════
-// شاشة تسجيل الدخول
-// ════════════════════════════════════════════════════════════════
-function showLoginScreen(){
-  const users = getUsers();
-  const screen = document.getElementById('co-screen');
-  if(screen) screen.style.display = 'none';
-
-  let loginDiv = document.getElementById('login-screen');
-  if(!loginDiv){
-    loginDiv = document.createElement('div');
-    loginDiv.id = 'login-screen';
-    loginDiv.style.cssText = `
-      position:fixed;inset:0;z-index:10000;
-      background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);
-      display:flex;align-items:center;justify-content:center;
-      font-family:'Cairo',sans-serif;direction:rtl`;
-    document.body.appendChild(loginDiv);
-  }
-
-  loginDiv.style.display = 'flex';
-  loginDiv.innerHTML = `
-    <div style="width:100%;max-width:400px;padding:20px">
-      <!-- Logo -->
-      <div style="text-align:center;margin-bottom:32px">
-        <div style="width:64px;height:64px;background:linear-gradient(135deg,#2ea043,#1a7f37);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 14px">💊</div>
-        <h1 style="color:#fff;font-size:22px;font-weight:700;margin:0">نظام ERP الدوائي</h1>
-        <p style="color:#8b949e;font-size:13px;margin:6px 0 0">سجّل الدخول للمتابعة</p>
-      </div>
-
-      <!-- Form -->
-      <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px">
-        <div style="margin-bottom:16px">
-          <label style="color:#8b949e;font-size:12px;display:block;margin-bottom:6px">اسم المستخدم</label>
-          <input id="login-user" type="text" placeholder="أدخل اسم المستخدم"
-            style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:13px;color:#fff;font-family:Cairo,sans-serif;box-sizing:border-box"
-            onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
-        </div>
-        <div style="margin-bottom:20px">
-          <label style="color:#8b949e;font-size:12px;display:block;margin-bottom:6px">كلمة المرور</label>
-          <input id="login-pass" type="password" placeholder="أدخل كلمة المرور"
-            style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:13px;color:#fff;font-family:Cairo,sans-serif;box-sizing:border-box"
-            onkeydown="if(event.key==='Enter')doLogin()">
-        </div>
-        <div id="login-error" style="color:#f85149;font-size:12px;margin-bottom:12px;display:none;padding:8px;background:rgba(248,81,73,.1);border-radius:6px;text-align:center"></div>
-        <button onclick="doLogin()"
-          style="width:100%;background:linear-gradient(135deg,#2ea043,#1a7f37);color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif">
-          تسجيل الدخول
-        </button>
-      </div>
-
-      <!-- Default credentials hint -->
-      ${users.length === 0 ? `
-      <div style="margin-top:14px;padding:12px;background:rgba(56,139,253,.1);border:1px solid rgba(56,139,253,.2);border-radius:8px;font-size:12px;color:#8b949e;text-align:center">
-        🔑 أول مرة؟ اسم المستخدم: <strong style="color:#fff">admin</strong> | كلمة المرور: <strong style="color:#fff">admin123</strong>
-      </div>` : ''}
-
-      <div style="margin-top:16px;text-align:center;font-size:11px;color:#484f58">
-        نظام ERP الدوائي — جميع الحقوق محفوظة
-      </div>
-    </div>`;
-
-  setTimeout(()=> document.getElementById('login-user')?.focus(), 100);
-}
-
-function doLogin(){
-  const username = document.getElementById('login-user')?.value?.trim();
-  const password = document.getElementById('login-pass')?.value;
-  const errEl    = document.getElementById('login-error');
-
-  if(!username || !password){
-    showLoginError('يرجى إدخال اسم المستخدم وكلمة المرور');
-    return;
-  }
-
-  const users = getUsers();
-
-  // أول تشغيل — admin افتراضي
-  if(users.length === 0){
-    if(username === 'admin' && password === 'admin123'){
-      // أنشئ admin افتراضي في DB
-      insert('appUsers',{
-        username:'admin', password:hashPassword('admin123'),
-        name:'مدير النظام', role:'admin', active:true, createdAt:new Date().toISOString()
-      });
-      loginSuccess({ username:'admin', name:'مدير النظام', role:'admin' });
-      return;
-    }
-  }
-
-  // بحث عن المستخدم
-  const user = users.find(u => u.username === username && u.active !== false);
-  if(!user){
-    showLoginError('اسم المستخدم غير موجود');
-    return;
-  }
-
-  // تحقق من الباسورد
-  if(user.password !== hashPassword(password) && user.password !== password){
-    showLoginError('كلمة المرور غير صحيحة');
-    return;
-  }
-
-  loginSuccess(user);
-}
-
-function showLoginError(msg){
-  const el = document.getElementById('login-error');
-  if(el){ el.textContent = msg; el.style.display = 'block'; }
-  document.getElementById('login-pass').value = '';
-}
-
-function loginSuccess(user){
-  _currentUser = user;
-  // Save session
-  try{ sessionStorage.setItem('_erp_session', JSON.stringify({
-    username:user.username, name:user.name, role:user.role, loginAt:new Date().toISOString()
-  })); }catch(e){}
-
-  // Hide login screen
-  const loginDiv = document.getElementById('login-screen');
-  if(loginDiv) loginDiv.style.display = 'none';
-
-  // Show app UI
-  const sidebarEl = document.querySelector('aside');
-  const mainEl    = document.querySelector('main');
-  if(sidebarEl) sidebarEl.style.display = 'flex';
-  if(mainEl)    mainEl.style.display    = 'flex';
-
-  // Update user info in topbar
-  updateUserBadge();
-
-  // Go to dashboard
-  go('dashboard');
-}
-
-function logout(){
-  _currentUser = null;
-  try{ sessionStorage.removeItem('_erp_session'); }catch(e){}
-  // Hide app UI
-  const sidebarEl = document.querySelector('aside');
-  const mainEl    = document.querySelector('main');
-  if(sidebarEl) sidebarEl.style.display = 'none';
-  if(mainEl)    mainEl.style.display    = 'none';
-  showLoginScreen();
-}
-
-// ── Topbar user badge ─────────────────────────────────────────
-function updateUserBadge(){
-  const el = document.getElementById('user-badge');
-  if(!el || !_currentUser) return;
-  const role = ROLES[_currentUser.role];
-  el.innerHTML = `
-    <span style="font-size:14px">${role?.icon||'👤'}</span>
-    <span style="font-size:12px;color:var(--text)">${_currentUser.name||_currentUser.username}</span>
-    <span style="font-size:10px;color:var(--muted)">${role?.label||''}</span>
-    <button onclick="logout()" title="تسجيل الخروج"
-      style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 2px;line-height:1">⏻</button>`;
-}
-
-// ── Hash بسيط (XOR + base64) ─────────────────────────────────
-function hashPassword(pass){
-  // Simple hash — not cryptographic, but sufficient for local app
-  let h = 0;
-  for(let i=0;i<pass.length;i++) h=(Math.imul(31,h)+pass.charCodeAt(i))|0;
-  return 'h:' + Math.abs(h).toString(36) + ':' + pass.length;
-}
-
-// ── Restore session on reload ─────────────────────────────────
-function restoreSession(){
-  try{
-    const s = sessionStorage.getItem('_erp_session');
-    if(s){
-      const session = JSON.parse(s);
-      // Verify user still exists
-      const users = getUsers();
-      if(users.length === 0 && session.username === 'admin'){
-        _currentUser = session;
-        return true;
-      }
-      const user = users.find(u=>u.username===session.username&&u.active!==false);
-      if(user){ _currentUser = session; return true; }
-    }
-  }catch(e){}
-  return false;
-}
-
-// ── Nav filtering based on role ───────────────────────────────
-const _origRenderNav = renderNav;
-function renderNav(){
-  _origRenderNav();
-  // Hide nav items user can't access
-  if(!_currentUser) return;
-  document.querySelectorAll('.nav-item').forEach(el=>{
-    const page = el.dataset.page;
-    if(page && !canAccess(page)){
-      el.style.display = 'none';
-    }
-  });
-  // Show readonly badge
-  if(isReadOnly()){
-    document.querySelectorAll('.btn-green,.icon-btn.edit,.icon-btn.del').forEach(el=>{
-      el.style.display = 'none';
-    });
-  }
-}
-
-// ── go() protection ───────────────────────────────────────────
-const _origGo2 = go;
-function go(page){
-  if(page !== 'dashboard' && !canAccess(page)){
-    showNotif?.('⛔ ليس لديك صلاحية الوصول لهذه الصفحة', 'error');
-    _origGo2('dashboard');
-    return;
-  }
-  _origGo2(page);
-}
-
-// ════════════════════════════════════════════════════════════════
-// PAGES.users — إدارة المستخدمين (admin فقط)
-// ════════════════════════════════════════════════════════════════
-PAGES.users = function(){
-  if(_currentUser?.role !== 'admin'){
-    showNotif?.('⛔ هذه الصفحة للمدير فقط','error');
-    go('dashboard'); return;
-  }
-  const users = getUsers();
-  setPage('إدارة المستخدمين والصلاحيات','التحكم في وصول كل مستخدم للموديولات',
-    `<button class="btn btn-green" onclick="addUser()">${ic.plus} مستخدم جديد</button>`,
-    `<div class="stats-grid g4" style="margin-bottom:16px">
-      ${Object.entries(ROLES).map(([key,role])=>`
-        <div class="stat-card">
-          <div class="lbl">${role.icon} ${role.label}</div>
-          <div class="val" style="color:${role.color}">${users.filter(u=>u.role===key).length}</div>
-          <div class="sub">مستخدم</div>
-        </div>`).join('')}
-    </div>
-
-    <div class="card">${tbl(
-      ['المستخدم','الاسم','الدور','الصلاحيات','تاريخ الإنشاء','الحالة',''],
-      users.map(u=>{
-        const role = ROLES[u.role]||{};
-        const mods = role.modules==='*'?'كل الموديولات':
-                     Array.isArray(role.modules)?role.modules.length+' موديول':'—';
-        return tr(
-          `<code class="fw7">${u.username}</code>`,
-          u.name||'—',
-          `<span class="badge" style="background:${role.color}22;color:${role.color};border:1px solid ${role.color}44">${role.icon} ${role.label||u.role}</span>`,
-          `<span style="font-size:11px;color:var(--muted)">${mods}</span>`,
-          u.createdAt?new Date(u.createdAt).toLocaleDateString('ar-EG'):'—',
-          u.active!==false?'<span class="badge b-green">نشط</span>':'<span class="badge b-red">موقوف</span>',
-          u.username==='admin'?'<span style="color:var(--muted);font-size:11px">محمي</span>':
-          `<div class="action-bar">
-            <button class="icon-btn edit" onclick="editUser(${u.id})">${ic.edit}</button>
-            <button class="icon-btn" onclick="toggleUser(${u.id})" title="${u.active!==false?'إيقاف':'تفعيل'}" style="color:var(--amber)">
-              ${u.active!==false?'⏸':'▶'}
-            </button>
-            <button class="icon-btn del" onclick="if(confirm('حذف المستخدم؟')){remove('appUsers',${u.id});go('users')}">${ic.del}</button>
-          </div>`
-        );
-      })
-    )}</div>
-
-    <!-- Role permissions table -->
-    <div class="card" style="margin-top:16px">
-      <div class="card-head"><h2>📋 جدول الصلاحيات</h2></div>
-      <div class="tbl-wrap"><table style="font-size:11px">
-        <thead><tr>
-          <th>الموديول</th>
-          ${Object.entries(ROLES).map(([k,r])=>`<th>${r.icon}<br>${r.label}</th>`).join('')}
-        </tr></thead>
-        <tbody>
-          ${[...new Set(Object.values(ROLES).flatMap(r=>r.modules==='*'?[]:r.modules))].map((mod,i)=>`
-          <tr style="background:${i%2?'rgba(255,255,255,.02)':''}">
-            <td class="fw7">${mod}</td>
-            ${Object.entries(ROLES).map(([k,r])=>`
-              <td style="text-align:center">${r.modules==='*'||r.modules?.includes(mod)?'✅':'—'}</td>
-            `).join('')}
-          </tr>`).join('')}
-        </tbody>
-      </table></div>
-    </div>`
-  );
-};
-
-function userForm(u={}){
-  return `
-    <div class="form-row">
-      ${fg('اسم المستخدم (للدخول) *',inp('usr-name','text',u.username||'','مثال: ahmed.sales'))}
-      ${fg('الاسم الكامل *',inp('usr-fullname','text',u.name||'','مثال: أحمد محمد'))}
-    </div>
-    <div class="form-row">
-      ${fg('كلمة المرور *',inp('usr-pass','password','',u.id?'اتركه فارغاً للإبقاء على القديم':'كلمة المرور'))}
-      ${fg('تأكيد كلمة المرور',inp('usr-pass2','password','',''))}
-    </div>
-    ${fg('الدور / الصلاحية *',`<select id="usr-role" onchange="previewRole(this.value)">
-      ${Object.entries(ROLES).map(([k,r])=>`<option value="${k}"${u.role===k?' selected':''}>${r.icon} ${r.label}</option>`).join('')}
-    </select>`)}
-    <div id="role-preview" style="margin-top:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)"></div>
-    <div class="form-actions">
-      <button class="btn btn-green" onclick="saveUser(${u.id||''})">💾 حفظ</button>
-      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
-    </div>`;
-}
-
-function previewRole(roleKey){
-  const role = ROLES[roleKey];
-  const el   = document.getElementById('role-preview');
-  if(!el||!role) return;
-  const mods = role.modules==='*'?'كل الموديولات ('+Object.keys(ROLES).length+' قسم)':
-               role.modules?.join(' • ')||'لا يوجد';
-  el.innerHTML = `<strong style="color:${role.color}">${role.icon} ${role.label}</strong><br>
-    الوصول: ${mods}${role.readonly?'<br><span style="color:var(--amber)">⚠️ مشاهدة فقط</span>':''}`;
-}
-
-function addUser(){
-  showModal(modal('➕ مستخدم جديد',userForm()));
-  setTimeout(()=>previewRole('sales'),100);
-}
-function editUser(id){
-  const u=getById('appUsers',id); if(!u) return;
-  showModal(modal('تعديل المستخدم',userForm(u)));
-  setTimeout(()=>previewRole(u.role),100);
-}
-
-function saveUser(id){
-  const username = val('usr-name')?.trim();
-  const name     = val('usr-fullname')?.trim();
-  const pass     = val('usr-pass');
-  const pass2    = val('usr-pass2');
-  const role     = document.getElementById('usr-role')?.value;
-  if(!username||!name) return alert('يرجى تعبئة اسم المستخدم والاسم الكامل');
-  if(!id && !pass) return alert('يرجى إدخال كلمة المرور');
-  if(pass && pass !== pass2) return alert('كلمة المرور غير متطابقة');
-  // Check duplicate username
-  const existing = getUsers().find(u=>u.username===username&&(!id||u.id!==id));
-  if(existing) return alert('اسم المستخدم موجود بالفعل');
-  const d = { username, name, role, active:true };
-  if(pass) d.password = hashPassword(pass);
-  id ? update('appUsers',id,d) : insert('appUsers',d);
-  closeModal(); go('users');
-}
-
-function toggleUser(id){
-  const u=getById('appUsers',id); if(!u) return;
-  update('appUsers',id,{active:!u.active});
-  go('users');
 }
 
 
