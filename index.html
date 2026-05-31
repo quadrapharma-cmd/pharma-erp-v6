@@ -18,7 +18,7 @@
 body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;font-size:14px}
 
 /* SIDEBAR */
-aside{width:240px;background:var(--sidebar);border-left:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;right:0;height:100vh;z-index:100;overflow-y:auto}
+aside{width:240px;background:var(--sidebar);border-left:1px solid var(--border);display:none;flex-direction:column;position:fixed;top:0;right:0;height:100vh;z-index:100;overflow-y:auto}
 .logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
 .logo-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#2ea043,#1a7f37);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#fff;flex-shrink:0;box-shadow:0 0 20px rgba(46,160,67,.3)}
 .logo-text .t1{font-weight:700;font-size:14px;line-height:1.2;color:var(--text)}
@@ -32,7 +32,7 @@ nav{flex:1;padding:10px 8px;overflow-y:auto}
 .sidebar-footer{padding:14px 16px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:11px}
 
 /* MAIN */
-main{margin-right:240px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+main{margin-right:240px;flex:1;display:none;flex-direction:column;min-height:100vh}
 .topbar{background:var(--sidebar);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
 .topbar-left h1{font-size:20px;font-weight:700;color:var(--text)}
 .topbar-left p{font-size:12px;color:var(--muted);margin-top:2px}
@@ -1937,6 +1937,10 @@ function coEnter(c){
   if(!restoreSession()){
     showLoginScreen();
   } else {
+    const sidebarEl = document.querySelector('aside');
+    const mainEl    = document.querySelector('main');
+    if(sidebarEl) sidebarEl.style.display = 'flex';
+    if(mainEl)    mainEl.style.display    = 'flex';
     updateUserBadge();
     go('dashboard');
   }
@@ -9399,6 +9403,12 @@ function loginSuccess(user){
   const loginDiv = document.getElementById('login-screen');
   if(loginDiv) loginDiv.style.display = 'none';
 
+  // Show app UI
+  const sidebarEl = document.querySelector('aside');
+  const mainEl    = document.querySelector('main');
+  if(sidebarEl) sidebarEl.style.display = 'flex';
+  if(mainEl)    mainEl.style.display    = 'flex';
+
   // Update user info in topbar
   updateUserBadge();
 
@@ -9409,9 +9419,11 @@ function loginSuccess(user){
 function logout(){
   _currentUser = null;
   try{ sessionStorage.removeItem('_erp_session'); }catch(e){}
-  // Re-show company screen (so they can pick company again)
-  const appDiv = document.querySelector('.app');
-  if(appDiv) appDiv.style.display = 'none';
+  // Hide app UI
+  const sidebarEl = document.querySelector('aside');
+  const mainEl    = document.querySelector('main');
+  if(sidebarEl) sidebarEl.style.display = 'none';
+  if(mainEl)    mainEl.style.display    = 'none';
   showLoginScreen();
 }
 
