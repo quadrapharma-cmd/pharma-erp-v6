@@ -9345,22 +9345,37 @@ function _updateBadge(){
 
 function _filterNav(){
   if(!_authUser) return;
-  document.querySelectorAll('[data-page]').forEach(el=>{
-    const page = el.dataset.page;
-    if(page) el.style.display = _canAccess(page) ? '' : 'none';
-  });
+  try{
+    document.querySelectorAll('[data-page]').forEach(el=>{
+      const page = el.dataset.page;
+      if(page) el.style.display = _canAccess(page) ? '' : 'none';
+    });
+    // Also filter nav-item elements
+    document.querySelectorAll('.nav-item').forEach(el=>{
+      const onclick = el.getAttribute('onclick')||'';
+      const m = onclick.match(/go\(['"](\w+)['"]\)/);
+      if(m && m[1]) el.style.display = _canAccess(m[1]) ? '' : 'none';
+    });
+  }catch(e){}
 }
 
-// Override go() to check permissions
-const _origGo = go;
-function go(page){
-  if(_authUser && page!=='dashboard' && !_canAccess(page)){
+// Patch go() to add permission check — no recursion
+const _origGo = (function(){
+  // Capture reference to the REAL go before any override
+  return window.go || function(page){
+    currentPage=page; renderNav(); closeModal(); (PAGES[page]||PAGES.dashboard)();
+  };
+})();
+
+// Redefine go with permission check
+go = function(page){
+  if(_authUser && page && page!=='dashboard' && !_canAccess(page)){
     showNotif && showNotif('⛔ ليس لديك صلاحية هذه الصفحة','error');
     _origGo('dashboard'); return;
   }
   _origGo(page);
   setTimeout(_filterNav, 100);
-}
+};
 
 // Override coEnter to restore session or show login
 const _origCoEnterFlow = _showLoginScreen;
