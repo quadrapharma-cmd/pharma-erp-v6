@@ -816,7 +816,7 @@ distributors(){
   setPage('شركات التوزيع',`${rows.length} موزع`,
     `<button class="btn btn-green" onclick="addDistributor()">${ic.plus} إضافة موزع</button>`,
     `<div class="card">${tbl(['اسم الشركة','المسؤول','الهاتف','البريد','حد الائتمان','الحالة',''],
-      rows.map(d=>tr(`<strong>${d.name}</strong>`,d.contactPerson||'-',d.phone||'-',d.email||'-',
+      rows.map(d=>tr(`<strong>${escapeHtml(d.name)}</strong>`,d.contactPerson||'-',d.phone||'-',d.email||'-',
         d.creditLimit?`<span class="text-blue fw7">${fmt(d.creditLimit)} ج.م</span>`:'-',
         badge(d.status||'active'),
         `<div class="action-bar"><button class="icon-btn edit" onclick="editDistributor(${d.id})">${ic.edit}</button><button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('distributors',${d.id});go('distributors')}">${ic.del}</button></div>`
@@ -874,7 +874,7 @@ employees(){
       <div class="stat-card"><div class="lbl">الرواتب السنوية</div><div class="val text-purple">${fmt(ts*12)} ج.م</div></div>
     </div>
     <div class="card">${tbl(['الاسم','القسم','المنصب','الراتب','تاريخ التعيين','الهاتف','الحالة',''],
-      rows.map(e=>tr(`<strong>${e.name}</strong>`,e.department,e.position,
+      rows.map(e=>tr(`<strong>${escapeHtml(e.name)}</strong>`,e.department,e.position,
         e.salary?`<span class="fw7">${fmt(e.salary)} ج.م</span>`:'-',
         e.hireDate||'-', e.phone||'-', badge(e.status||'active'),
         `<div class="action-bar"><button class="icon-btn edit" onclick="editEmployee(${e.id})">${ic.edit}</button><button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('employees',${e.id});go('employees')}">${ic.del}</button></div>`
@@ -1580,7 +1580,7 @@ PAGES.payroll=function(){
     </div>
     <div id="pay-emp" class="tab-pane" data-group="pay"><div class="card">${tbl(['الاسم','القسم','الراتب الأساسي','البدلات','الخصومات','صافي الراتب',''],
       emps.map(e=>{const net=Number(e.salary||0)+Number(e.allowances||0)-Number(e.deductions||0);
-        return tr(`<strong>${e.name}</strong>`,e.department,fmt(e.salary||0)+' ج.م',
+        return tr(`<strong>${escapeHtml(e.name)}</strong>`,e.department,fmt(e.salary||0)+' ج.م',
           Number(e.allowances||0)?fmt(e.allowances)+' ج.م':'—',
           Number(e.deductions||0)?`<span class="text-red">${fmt(e.deductions)} ج.م</span>`:'—',
           `<span class="text-green fw7">${fmt(net)} ج.م</span>`,
@@ -1737,7 +1737,7 @@ PAGES.costanalysis=function(){
         const price=Number(p.sellingPrice||0);
         const margin=price-total;
         const pct=price>0?(margin/price*100):0;
-        return tr(`<strong>${p.name}</strong>`,
+        return tr(`<strong>${escapeHtml(p.name)}</strong>`,
           matCost?fmt(matCost)+' ج.م':'—',
           cmoCost?fmt(cmoCost)+' ج.م':'—',
           `<span class="text-red fw7">${fmt(total)} ج.م</span>`,
@@ -2996,7 +2996,7 @@ PAGES.costanalysis = function(){
       ['المنتج','عدد التشغيلات','آخر تكلفة مواد/وحدة','آخر تكلفة CMO/وحدة','إجمالي التكلفة/وحدة','سعر البيع','هامش الربح','هامش %','اتجاه التكلفة'],
       products.map(p => {
         const pOrders = production.filter(o=>o.productId===p.id).sort((a,b)=>(a.orderDate||'')>(b.orderDate||'')?1:-1);
-        if(!pOrders.length) return tr(`<strong>${p.name}</strong>`,'0','—','—','—',p.sellingPrice?fmt(p.sellingPrice)+' ج.م':'—','—','—','—');
+        if(!pOrders.length) return tr(`<strong>${escapeHtml(p.name)}</strong>`,'0','—','—','—',p.sellingPrice?fmt(p.sellingPrice)+' ج.م':'—','—','—','—');
 
         const last  = pOrders[pOrders.length-1];
         const first = pOrders[0];
@@ -3023,7 +3023,7 @@ PAGES.costanalysis = function(){
         const margin = price > 0 ? ((price-lastTotal)/price*100) : 0;
 
         return tr(
-          `<strong>${p.name}</strong>`,
+          `<strong>${escapeHtml(p.name)}</strong>`,
           pOrders.length,
           lastMatUnit > 0 ? fmt(lastMatUnit)+' ج.م' : '—',
           lastCMOUnit > 0 ? fmt(lastCMOUnit)+' ج.م' : '—',
@@ -4746,7 +4746,7 @@ function reportCOGS(F){
     ${tbl(['المنتج','عدد التشغيلات','الكمية المنتجة','تكلفة المواد','تكلفة CMO',
            'إجمالي التكلفة','تكلفة الوحدة','سعر البيع','هامش الربح %'],
       prodCosts.length ? prodCosts.map(p=>tr(
-        `<strong>${p.name}</strong>`,
+        `<strong>${escapeHtml(p.name)}</strong>`,
         p.batches,
         fmtN(p.totalQty)+' وحدة',
         p.matCost?`<span class="text-blue fw7">${fmt(p.matCost)} ج.م</span>`:'—',
@@ -4777,7 +4777,7 @@ function reportCOGS(F){
       if(!rows.length) return '<div class="empty">لا توجد مواد مرتبطة بتشغيلات بعد</div>';
       return tbl(['المادة','النوع','الكمية المستخدمة','التكلفة الإجمالية','متوسط سعر الوحدة','عدد الفواتير المستخدمة'],
         rows.sort((a,b)=>b.totalCost-a.totalCost).map(m=>tr(
-          `<strong>${m.name}</strong>`,
+          `<strong>${escapeHtml(m.name)}</strong>`,
           badge(m.type),
           fmtN(m.totalQty),
           `<span class="text-red fw7">${fmt(m.totalCost)} ج.م</span>`,
@@ -4954,7 +4954,7 @@ function reportInventory(F){
         mats.map(m=>{
           const low=m.reorderLevel&&Number(m.currentStock||0)<=Number(m.reorderLevel);
           return tr(
-            `<strong>${m.name}</strong>`,
+            `<strong>${escapeHtml(m.name)}</strong>`,
             badge(m.materialType),
             `<span class="${low?'text-red fw7':''}">${fmtN(m.currentStock||0)} ${m.unit}</span>`,
             m.unitCost?`<span class="text-blue fw7">${fmt(Number(m.currentStock||0)*Number(m.unitCost||0))} ج.م</span>`:'—',
@@ -5894,7 +5894,7 @@ function reportCOGS(F){
     ${tbl(['المنتج','التشغيلات','الكمية','تكلفة المواد','تكلفة CMO','إجمالي التكلفة',
            'تكلفة الوحدة','سعر البيع','هامش %','Yield Rate','حالة'],
       prodCosts.length?prodCosts.map(p=>tr(
-        `<strong>${p.name}</strong>`,p.batches,fmtN(p.totalQty)+' وحدة',
+        `<strong>${escapeHtml(p.name)}</strong>`,p.batches,fmtN(p.totalQty)+' وحدة',
         p.matCost?`<span class="text-blue fw7">${fmt(p.matCost)} ج.م</span>`:'—',
         p.cmoCost?`<span class="text-amber fw7">${fmt(p.cmoCost)} ج.م</span>`:'—',
         `<span class="text-red fw7">${fmt(p.total)} ج.م</span>`,
@@ -5930,7 +5930,7 @@ function reportCOGS(F){
       if(!rows.length)return '<div class="empty">لا توجد مواد مرتبطة بتشغيلات</div>';
       return tbl(['المادة','النوع','الكمية المستخدمة','الوحدة','التكلفة الكلية','متوسط سعر الوحدة','عدد الفواتير'],
         rows.sort((a,b)=>b.cost-a.cost).map(m=>tr(
-          `<strong>${m.name}</strong>`,badge(m.type),fmtN(m.qty),m.unit,
+          `<strong>${escapeHtml(m.name)}</strong>`,badge(m.type),fmtN(m.qty),m.unit,
           `<span class="text-red fw7">${fmt(m.cost)} ج.م</span>`,
           m.qty?fmt(m.cost/m.qty)+' ج.م':'—',m.invoices.size
         )));
@@ -6136,7 +6136,7 @@ function reportInventory(F){
           const low=m.reorderLevel&&Number(m.currentStock||0)<=Number(m.reorderLevel);
           const pct=m.reorderLevel?Number(m.currentStock||0)/Number(m.reorderLevel):1;
           return tr(
-            `<strong>${m.name}</strong>`,
+            `<strong>${escapeHtml(m.name)}</strong>`,
             `<span class="${low?'text-red fw7':''}">${fmtN(m.currentStock||0)} ${m.unit}</span>`,
             m.reorderLevel?fmtN(m.reorderLevel)+' '+m.unit:'—',
             `<span class="text-blue">${fmt(Number(m.currentStock||0)*Number(m.unitCost||0))} ج.م</span>`,
@@ -6384,7 +6384,7 @@ function reportEmployees(F){
       active.sort((a,b)=>Number(b.salary||0)-Number(a.salary||0)).map(e=>{
         const net=Number(e.salary||0)+Number(e.allowances||0)-Number(e.deductions||0);
         return tr(
-          `<strong>${e.name}</strong>`,e.department,e.position,
+          `<strong>${escapeHtml(e.name)}</strong>`,e.department,e.position,
           fmt(e.salary||0)+' ج.م',
           Number(e.allowances||0)?`<span class="text-green">${fmt(e.allowances)} ج.م</span>`:'—',
           Number(e.deductions||0)?`<span class="text-red">${fmt(e.deductions)} ج.م</span>`:'—',
@@ -6761,7 +6761,7 @@ PAGES.partners = function(){
         partners.map(p => {
           const bal = calcBalance(p.id);
           return tr(
-            `<strong>${p.name}</strong>`,
+            `<strong>${escapeHtml(p.name)}</strong>`,
             p.role||'شريك', p.type||'توصية',
             `<span class="text-green fw7">${fmt(bal.credit)} ج.م</span>`,
             `<span class="text-red fw7">${fmt(bal.debit)} ج.م</span>`,
@@ -8362,7 +8362,7 @@ PAGES.shareholders = function(){
             const pEntries=entries.filter(e=>e.partnerId===p.id);
             const bal=pEntries.reduce((s,e)=>s+Number(e.credit||0)-Number(e.debit||0),0);
             return tr(
-              `<strong>${p.name}</strong>`,
+              `<strong>${escapeHtml(p.name)}</strong>`,
               {managing_partner:'مدير',silent_partner:'موصٍ',investor:'مستثمر',shareholder:'مساهم',lender:'مقرض'}[p.role]||'—',
               p.ownershipPct?p.ownershipPct+'%':'—',
               `<span class="${bal>=0?'text-green':'text-red'} fw7">${fmt(Math.abs(bal))} ج.م</span>`,
