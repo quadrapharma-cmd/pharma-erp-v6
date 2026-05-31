@@ -1168,6 +1168,19 @@ function saveProduct(id){
   if(!name||!form||form==='اختر...') return alert('يرجى تعبئة الحقول الإلزامية');
   const d={name,scientificName:val('p-sci')||null,dosageForm:form,strength:val('p-str')||null,unit:val('p-unit')||'علبة',sellingPrice:val('p-price')||null,status:val('p-status')};
   id?update('products',id,d):insert('products',d);
+  // Save pending ingredients for new product
+  if(!id && window._pendingIngredients && window._pendingIngredients.length){
+    var saved = getAll('products');
+    var newProd = saved[saved.length-1];
+    if(newProd){
+      window._pendingIngredients.forEach(function(ing){
+        delete ing._tmpId;
+        ing.productId = newProd.id;
+        insert('productIngredients', ing);
+      });
+    }
+    window._pendingIngredients = [];
+  }
   closeModal(); go('products');
 }
 
@@ -9547,6 +9560,83 @@ function escapeHtml(str){
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
 }
+
+
+// ════════════════════════════════════════════════════════════════
+// PRODUCT INGREDIENTS — مكونات وتركيبة المنتج
+// ════════════════════════════════════════════════════════════════
+
+function renderIngredientList(productId){
+  const container = document.getElementById('pf-ing-list');
+  if(!container) return;
+
+  let ingredients = [];
+  if(productId){
+    ingredients = getAll('productIngredients').filter(function(i){ return i.productId===productId; });
+  } else {
+    ingredients = window._pendingIngredients || [];
+  }
+
+  if(!ingredients.length){
+    container.innerHTML = '<div class="empty" style="padding:12px;font-size:12px">لا توجد مكونات مضافة — أضف المادة الفعالة والسواغات</div>';
+    return;
+  }
+
+  const typeLabels = { active:'مادة فعالة', excipient:'سواغ', coating:'طلاء', preservative:'حافظ', other:'أخرى' };
+  const typeColors = { active:'b-green', excipient:'b-gray', coating:'b-blue', preservative:'b-amber', other:'b-gray' };
+
+  container.innerHTML = ingredients.map(function(ing, i){
+    var tid = productId ? ing.id : (ing._tmpId || i);
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;background:rgba(255,255,255,.02);padding:8px 12px;border-radius:8px;border:1px solid var(--border)">'
+      + '<div style="flex:1">'
+      + '<span style="font-weight:600;font-size:13px">' + (ing.name||'—') + '</span>'
+      + ' <span style="font-size:11px;color:var(--muted)">(' + (ing.concentration||'') + ' ' + (ing.unit||'') + ')</span>'
+      + '</div>'
+      + '<span class="badge ' + (typeColors[ing.type]||'b-gray') + '">' + (typeLabels[ing.type]||ing.type||'—') + '</span>'
+      + '<button onclick="removeIngredientFromList(' + tid + ',' + (productId||0) + ')" '
+      + 'style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0 4px" title="حذف">×</button>'
+      + '</div>';
+  }).join('');
+}
+
+function addIngredientToList(productId){
+  var name = (document.getElementById('ing-name')?.value||'').trim();
+  var type = document.getElementById('ing-type')?.value || 'active';
+  var conc = (document.getElementById('ing-conc')?.value||'').trim();
+  var unit = document.getElementById('ing-unit')?.value || 'mg';
+  var pharma = (document.getElementById('ing-pharma')?.value||'').trim();
+
+  if(!name || !conc){
+    alert('يرجى إدخال اسم المكون والتركيز على الأقل');
+    return;
+  }
+
+  var newIng = { name:name, type:type, concentration:conc, unit:unit, pharmacopoeialRef:pharma };
+
+  if(productId){
+    // Product already saved — insert directly
+    newIng.productId = productId;
+    insert('productIngredients', newIng);
+  } else {
+    // New product — store in pending array
+    if(!window._pendingIngredients) window._pendingIngredients = [];
+    newIng._tmpId = Date.now();
+    window._pendingIngredients.push(newIng);
+  }
+
+  renderIngredientList(productId||0);
+
+  // Clear inputs
+  var nameEl = document.getElementById('ing-name');
+  var concEl = document.getElementById('ing-conc');
+  if(nameEl) nameEl.value = '';
+  if(concEl) concEl.value = '';
+  if(nameEl) nameEl.focus();
+}
+
+// removeIngredientFromList is already defined above — keep one version
+// (defined earlier, this comment serves as documentation)
+
 
 // renderNav/go called by coEnter() after company is selected
 
