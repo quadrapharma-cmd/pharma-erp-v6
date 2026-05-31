@@ -1023,7 +1023,7 @@ function renderExpTbl(type){
     rows.map(e=>tr(`<strong>${e.description}</strong>`,
       `<span class="${e.expenseType==='direct'?'text-blue':'text-purple'} fw7">${fmt(e.amount)} ج.م</span>`,
       badge(e.expenseType),e.category,e.department||'-',e.expenseDate||'-',e.reference||'-',
-      `<div class="action-bar"><button class="icon-btn edit" onclick="editExpense(${e.id})">${ic.edit}</button><button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('expenses',${e.id});go('expenses')}">${ic.del}</button><button class="icon-btn edit" onclick="editExpense(${e.id})">${ic.edit}</button></div>`
+      `<div class="action-bar"><button class="icon-btn edit" onclick="editExpense(${e.id})">${ic.edit}</button><button class="icon-btn del" onclick="if(confirm('حذف؟')){remove('expenses',${e.id});go('expenses')}">${ic.del}</button></div>`
     ))
   ));
 }
@@ -1632,13 +1632,17 @@ PAGES.expiry=function(){
       <div class="stat-card"><div class="lbl">تنتهي خلال 6 أشهر</div><div class="val text-blue">${items.filter(i=>i.daysLeft>90&&i.daysLeft<=180).length}</div></div>
       <div class="stat-card"><div class="lbl">آمن</div><div class="val text-green">${items.filter(i=>i.daysLeft>180).length}</div></div>
     </div>
-    <div class="card">${tbl(['المنتج','رقم التشغيلة','الكمية','تاريخ الانتهاء','الأيام المتبقية','الحالة'],
+    <div class="card">${tbl(['المنتج','رقم التشغيلة','الكمية','تاريخ الانتهاء','الأيام المتبقية','الحالة',''],
       items.filter(i=>i.expiryDate).map(i=>{
         const s=i.daysLeft<0?'منتهي':i.daysLeft<=90?'خطر':i.daysLeft<=180?'تنبيه':'آمن';
         const c=i.daysLeft<0?'text-red':i.daysLeft<=90?'text-amber':i.daysLeft<=180?'text-blue':'text-green';
         return tr(`<strong>${i.productName}</strong>`,i.batchNumber||'-',fmtN(i.quantity),
           i.expiryDate||'-',`<span class="${c} fw7">${i.daysLeft<0?'منتهية':i.daysLeft+' يوم'}</span>`,
-          `<span class="${c}">${s}</span>`);
+          `<span class="${c}">${s}</span>`,
+          `<div class="action-bar">
+            <button class="icon-btn edit" onclick="editInventoryItem(${i.id})">${ic.edit}</button>
+            <button class="icon-btn del" onclick="if(confirm('حذف من المخزون؟')){remove('inventory',${i.id});go('expiry')}">${ic.del}</button>
+          </div>`);
       })
     )}</div>`);
 };
