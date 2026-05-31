@@ -330,6 +330,7 @@ strong{font-weight:700;color:var(--text)}
         🔔
         <span id="alerts-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border-radius:99px;font-size:10px;font-weight:700;min-width:16px;height:16px;align-items:center;justify-content:center;padding:0 4px;font-family:'Cairo',sans-serif"></span>
       </button>
+      <div id="auth-badge" style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px"></div>
       <button class="co-switch-btn" id="co-switch-btn" onclick="coShowScreen()">
         🏢 <span id="co-active-label">الشركة</span>
       </button>
@@ -359,7 +360,7 @@ const defaultDB = {
   registrations:[], distributors:[], deliveryOrders:[], deliveryItems:[],
   expenses:[], employees:[], budgetLines:[], campaigns:[], salesTargets:[],
   receivables:[], payrollRuns:[], purchaseOrders:[], qualityChecks:[],
-  returns:[], contracts:[], assets:[], eInvoices:[], taxLines:[], batchMaterials:[], productIngredients:[], partnerAccounts:[], partnerEntries:[], journalEntries:[], chartOfAccounts:[], historicalBalances:[],
+  returns:[], contracts:[], assets:[], eInvoices:[], taxLines:[], batchMaterials:[], productIngredients:[], partnerAccounts:[], partnerEntries:[], journalEntries:[], chartOfAccounts:[], historicalBalances:[], appUsers:[],
   _seq:{}
 };
 
@@ -560,6 +561,7 @@ const navItems=[
   {id:'vat',icon:'🧾',label:'ضريبة القيمة المضافة',sec:'الضرائب'},
   {id:'einvoice',icon:'📄',label:'الفواتير الإلكترونية',sec:'الضرائب'},
   {id:'taxes',icon:'🏦',label:'الضرائب العامة',sec:'الضرائب'},
+  {id:'users',icon:'⚙️',label:'الإعدادات والمستخدمون',sec:'الإعدادات'},
 ];
 
 function renderNav(){
@@ -1931,7 +1933,8 @@ function coEnter(c){
   /* hide selector, show app */
   document.getElementById('co-screen').style.display = 'none';
   renderNav();
-  go('dashboard');
+  // Show login screen
+  _showLoginScreen();
 }
 
 /* ── show selector ── */
@@ -9184,6 +9187,361 @@ function processBulkHistorical(){
   if(ok > 0) setTimeout(()=>{ closeModal(); go('historicalbalance'); }, 1000);
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH SYSTEM — نظام تسجيل الدخول والصلاحيات
+// ═══════════════════════════════════════════════════════════════
+
+const _ROLES = {
+  admin:      { label:'مدير النظام',   icon:'👑', color:'#e74c3c', all:true },
+  finance:    { label:'مدير مالي',    icon:'💰', color:'#2980b9',
+    pages:['dashboard','reports','expenses','budget','payroll','employees',
+           'journal','trialbalance','chartofaccounts','historicalbalance',
+           'partners','shareholders','purchasing','receivables','assets',
+           'vat','taxes','einvoice','costanalysis','contracts','marketing','users'] },
+  production: { label:'مدير إنتاج',   icon:'🏭', color:'#27ae60',
+    pages:['dashboard','products','materials','cmos','production','quality',
+           'bom','batchrecords','inventory','expiry','registration'] },
+  sales:      { label:'مدير مبيعات',  icon:'🚚', color:'#8e44ad',
+    pages:['dashboard','distributors','deliveries','returns','receivables',
+           'salesvstarget','products','inventory'] },
+  warehouse:  { label:'أمين المخزن',  icon:'📦', color:'#e67e22',
+    pages:['dashboard','inventory','expiry','materials','products'] },
+  accountant: { label:'محاسب',        icon:'🧾', color:'#16a085',
+    pages:['dashboard','expenses','budget','payroll','purchasing','receivables',
+           'journal','trialbalance','chartofaccounts','vat','taxes','reports'] },
+  viewer:     { label:'مشاهدة فقط',  icon:'👁',  color:'#7f8c8d',
+    pages:['dashboard','reports'], readonly:true },
+};
+
+let _authUser = null;
+
+// ── Hash بسيط ────────────────────────────────────────────────
+function _authHash(p){
+  let h = 0;
+  for(let i=0;i<p.length;i++) h=(Math.imul(31,h)+p.charCodeAt(i))|0;
+  return 'h:'+Math.abs(h).toString(36)+':'+p.length;
+}
+
+// ── Can user access this page? ────────────────────────────────
+function _canAccess(page){
+  if(!_authUser) return false;
+  const r = _ROLES[_authUser.role];
+  if(!r) return false;
+  if(r.all) return true;
+  return (r.pages||[]).includes(page);
+}
+
+// ── Show login screen ─────────────────────────────────────────
+function _showLoginScreen(){
+  const users = getAll('appUsers');
+  const isFirst = users.length === 0;
+
+  let el = document.getElementById('_auth_login');
+  if(!el){
+    el = document.createElement('div');
+    el.id = '_auth_login';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#0d1117,#161b22);display:flex;align-items:center;justify-content:center;font-family:Cairo,sans-serif;direction:rtl';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <div style="width:100%;max-width:380px;padding:16px">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="width:64px;height:64px;background:linear-gradient(135deg,#2ea043,#1a7f37);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px">💊</div>
+        <h1 style="color:#fff;font-size:20px;font-weight:700;margin:0">نظام ERP الدوائي</h1>
+        <p style="color:#8b949e;font-size:12px;margin:6px 0 0">سجّل الدخول للمتابعة</p>
+      </div>
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px">
+        <div style="margin-bottom:14px">
+          <label style="color:#8b949e;font-size:11px;display:block;margin-bottom:5px">اسم المستخدم</label>
+          <input id="_au" type="text" placeholder="أدخل اسم المستخدم" autocomplete="username"
+            style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:13px;color:#fff;font-family:Cairo,sans-serif;box-sizing:border-box;outline:none"
+            onkeydown="if(event.key==='Enter')document.getElementById('_ap').focus()">
+        </div>
+        <div style="margin-bottom:18px">
+          <label style="color:#8b949e;font-size:11px;display:block;margin-bottom:5px">كلمة المرور</label>
+          <input id="_ap" type="password" placeholder="كلمة المرور" autocomplete="current-password"
+            style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:13px;color:#fff;font-family:Cairo,sans-serif;box-sizing:border-box;outline:none"
+            onkeydown="if(event.key==='Enter')_doLogin()">
+        </div>
+        <div id="_aerr" style="display:none;color:#f85149;font-size:11px;margin-bottom:12px;padding:8px;background:rgba(248,81,73,.1);border-radius:6px;text-align:center"></div>
+        <button onclick="_doLogin()"
+          style="width:100%;background:linear-gradient(135deg,#2ea043,#1a7f37);color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif">
+          تسجيل الدخول
+        </button>
+      </div>
+      ${isFirst?`<div style="margin-top:12px;padding:10px;background:rgba(46,160,67,.08);border:1px solid rgba(46,160,67,.2);border-radius:8px;font-size:11px;color:#8b949e;text-align:center">
+        🔑 أول دخول — اسم المستخدم: <strong style="color:#fff">admin</strong> &nbsp;|&nbsp; كلمة المرور: <strong style="color:#fff">admin123</strong>
+      </div>`:''}
+    </div>`;
+  setTimeout(()=>document.getElementById('_au')?.focus(), 150);
+}
+
+function _doLogin(){
+  const u = (document.getElementById('_au')?.value||'').trim();
+  const p = document.getElementById('_ap')?.value||'';
+  const errEl = document.getElementById('_aerr');
+  const showErr = msg => { errEl.textContent=msg; errEl.style.display='block'; document.getElementById('_ap').value=''; };
+
+  if(!u||!p){ showErr('يرجى تعبئة اسم المستخدم وكلمة المرور'); return; }
+
+  const users = getAll('appUsers');
+
+  // First time default admin
+  if(users.length===0){
+    if(u==='admin'&&p==='admin123'){
+      insert('appUsers',{username:'admin',password:_authHash('admin123'),name:'مدير النظام',role:'admin',active:true});
+      _loginSuccess({username:'admin',name:'مدير النظام',role:'admin'});
+      return;
+    }
+    showErr('أول دخول: admin / admin123'); return;
+  }
+
+  const user = users.find(x=>x.username===u&&x.active!==false);
+  if(!user){ showErr('اسم المستخدم غير موجود'); return; }
+  if(user.password!==_authHash(p)&&user.password!==p){ showErr('كلمة المرور غير صحيحة'); return; }
+  _loginSuccess({username:user.username,name:user.name,role:user.role,id:user.id});
+}
+
+function _loginSuccess(sess){
+  _authUser = sess;
+  try{ sessionStorage.setItem('_erp_s', JSON.stringify(sess)); }catch(e){}
+  document.getElementById('_auth_login').style.display = 'none';
+  _updateBadge();
+  // Filter nav by role
+  _filterNav();
+  go('dashboard');
+}
+
+function _authLogout(){
+  _authUser = null;
+  try{ sessionStorage.removeItem('_erp_s'); }catch(e){}
+  _showLoginScreen();
+}
+
+function _restoreSession(){
+  try{
+    const s = sessionStorage.getItem('_erp_s');
+    if(!s) return false;
+    const sess = JSON.parse(s);
+    const users = getAll('appUsers');
+    if(users.length===0&&sess.username==='admin'){_authUser=sess;return true;}
+    if(users.find(x=>x.username===sess.username&&x.active!==false)){_authUser=sess;return true;}
+  }catch(e){}
+  return false;
+}
+
+function _updateBadge(){
+  const el = document.getElementById('auth-badge');
+  if(!el||!_authUser) return;
+  const r = _ROLES[_authUser.role]||{};
+  el.innerHTML = `<span>${r.icon||'👤'}</span>
+    <span style="color:var(--text)">${_authUser.name||_authUser.username}</span>
+    <span style="color:var(--muted);font-size:10px">${r.label||''}</span>
+    <button onclick="_authLogout()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0" title="تسجيل الخروج">⏻</button>`;
+}
+
+function _filterNav(){
+  if(!_authUser) return;
+  document.querySelectorAll('[data-page]').forEach(el=>{
+    const page = el.dataset.page;
+    if(page) el.style.display = _canAccess(page) ? '' : 'none';
+  });
+}
+
+// Override go() to check permissions
+const _origGo = go;
+function go(page){
+  if(_authUser && page!=='dashboard' && !_canAccess(page)){
+    showNotif && showNotif('⛔ ليس لديك صلاحية هذه الصفحة','error');
+    _origGo('dashboard'); return;
+  }
+  _origGo(page);
+  setTimeout(_filterNav, 100);
+}
+
+// Override coEnter to restore session or show login
+const _origCoEnterFlow = _showLoginScreen;
+// Already patched above — on coEnter we call _showLoginScreen
+// But if session exists, skip login
+function _showLoginScreen(){
+  if(_restoreSession()){
+    // Already logged in — just update UI
+    document.getElementById('_auth_login') && (document.getElementById('_auth_login').style.display='none');
+    _updateBadge();
+    _filterNav();
+    go('dashboard');
+    return;
+  }
+  // Show login UI
+  const users = getAll('appUsers');
+  const isFirst = users.length === 0;
+  let el = document.getElementById('_auth_login');
+  if(!el){
+    el = document.createElement('div');
+    el.id = '_auth_login';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#0d1117,#161b22);display:flex;align-items:center;justify-content:center;font-family:Cairo,sans-serif;direction:rtl';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <div style="width:100%;max-width:380px;padding:16px">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="width:64px;height:64px;background:linear-gradient(135deg,#2ea043,#1a7f37);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px">💊</div>
+        <h1 style="color:#fff;font-size:20px;font-weight:700;margin:0">نظام ERP الدوائي</h1>
+        <p style="color:#8b949e;font-size:12px;margin:6px 0 0">سجّل الدخول للمتابعة</p>
+      </div>
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px">
+        <div style="margin-bottom:14px">
+          <label style="color:#8b949e;font-size:11px;display:block;margin-bottom:5px">اسم المستخدم</label>
+          <input id="_au" type="text" placeholder="أدخل اسم المستخدم" autocomplete="username"
+            style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:13px;color:#fff;font-family:Cairo,sans-serif;box-sizing:border-box;outline:none"
+            onkeydown="if(event.key==='Enter')document.getElementById('_ap').focus()">
+        </div>
+        <div style="margin-bottom:18px">
+          <label style="color:#8b949e;font-size:11px;display:block;margin-bottom:5px">كلمة المرور</label>
+          <input id="_ap" type="password" placeholder="كلمة المرور" autocomplete="current-password"
+            style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-size:13px;color:#fff;font-family:Cairo,sans-serif;box-sizing:border-box;outline:none"
+            onkeydown="if(event.key==='Enter')_doLogin()">
+        </div>
+        <div id="_aerr" style="display:none;color:#f85149;font-size:11px;margin-bottom:12px;padding:8px;background:rgba(248,81,73,.1);border-radius:6px;text-align:center"></div>
+        <button onclick="_doLogin()"
+          style="width:100%;background:linear-gradient(135deg,#2ea043,#1a7f37);color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif">
+          تسجيل الدخول
+        </button>
+      </div>
+      ${isFirst?`<div style="margin-top:12px;padding:10px;background:rgba(46,160,67,.08);border:1px solid rgba(46,160,67,.2);border-radius:8px;font-size:11px;color:#8b949e;text-align:center">
+        🔑 أول دخول — اسم المستخدم: <strong style="color:#fff">admin</strong> &nbsp;|&nbsp; كلمة المرور: <strong style="color:#fff">admin123</strong>
+      </div>`:''}
+    </div>`;
+  setTimeout(()=>document.getElementById('_au')?.focus(), 150);
+}
+
+// ── PAGES.users — إدارة المستخدمين ───────────────────────────
+PAGES.users = function(){
+  if(_authUser?.role!=='admin'){
+    showNotif&&showNotif('⛔ هذه الصفحة للمدير فقط','error');
+    go('dashboard'); return;
+  }
+  const users = getAll('appUsers');
+
+  setPage('⚙️ الإعدادات — المستخدمون والصلاحيات',
+    `${users.length} مستخدم مسجل`,
+    `<button class="btn btn-green" onclick="_addUser()">${ic.plus} مستخدم جديد</button>`,
+    `<!-- KPIs -->
+    <div class="stats-grid g4" style="margin-bottom:16px">
+      ${Object.entries(_ROLES).map(([k,r])=>`
+        <div class="stat-card">
+          <div class="lbl">${r.icon} ${r.label}</div>
+          <div class="val" style="color:${r.color}">${users.filter(u=>u.role===k).length}</div>
+          <div class="sub">مستخدم</div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Users table -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><h2>👥 قائمة المستخدمين</h2></div>
+      ${tbl(
+        ['اسم الدخول','الاسم الكامل','الدور','الصلاحيات','الحالة',''],
+        users.map(u=>{
+          const r = _ROLES[u.role]||{};
+          const pages = r.all?'كل الموديولات':((r.pages||[]).length+' صفحة');
+          return tr(
+            `<code class="fw7">${u.username}</code>`,
+            u.name||'—',
+            `<span style="padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;background:${r.color}22;color:${r.color}">${r.icon} ${r.label||u.role}</span>`,
+            `<span style="font-size:11px;color:var(--muted)">${pages}</span>`,
+            u.active!==false?'<span class="badge b-green">نشط</span>':'<span class="badge b-red">موقوف</span>',
+            u.username==='admin'
+              ?'<span style="font-size:10px;color:var(--muted)">محمي</span>'
+              :`<div class="action-bar">
+                <button class="icon-btn edit" onclick="_editUser(${u.id})">${ic.edit}</button>
+                <button class="icon-btn" onclick="_toggleUser(${u.id})" style="color:var(--amber)" title="${u.active!==false?'إيقاف':'تفعيل'}">${u.active!==false?'⏸':'▶'}</button>
+                <button class="icon-btn del" onclick="if(confirm('حذف المستخدم؟')){remove('appUsers',${u.id});go('users')}">${ic.del}</button>
+              </div>`
+          );
+        })
+      )}
+    </div>
+
+    <!-- Roles permissions -->
+    <div class="card" style="padding:20px">
+      <h2 style="font-size:14px;font-weight:700;margin-bottom:14px">📋 صلاحيات كل دور</h2>
+      ${Object.entries(_ROLES).map(([k,r])=>`
+        <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <span style="font-size:18px">${r.icon}</span>
+            <strong style="color:${r.color}">${r.label}</strong>
+            ${r.all?'<span class="badge b-red">كل الصلاحيات</span>':r.readonly?'<span class="badge b-gray">قراءة فقط</span>':''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);padding-right:26px">
+            ${r.all?'وصول كامل لجميع الموديولات':(r.pages||[]).join(' • ')}
+          </div>
+        </div>`).join('')}
+    </div>`
+  );
+};
+
+function _userFormHTML(u={}){
+  return `
+    <div class="form-row">
+      ${fg('اسم الدخول (username) *',inp('_uu','text',u.username||'','مثال: ahmed.sales'))}
+      ${fg('الاسم الكامل *',inp('_un','text',u.name||'','مثال: أحمد محمد علي'))}
+    </div>
+    <div class="form-row">
+      ${fg('كلمة المرور *',inp('_up','password','',u.id?'اتركه فارغاً للإبقاء على القديم':'اختر كلمة مرور قوية'))}
+      ${fg('تأكيد كلمة المرور',inp('_up2','password','',''))}
+    </div>
+    ${fg('الدور والصلاحية *',`<select id="_ur" onchange="_previewRole(this.value)">
+      ${Object.entries(_ROLES).map(([k,r])=>`<option value="${k}"${u.role===k?' selected':''}>${r.icon} ${r.label}</option>`).join('')}
+    </select>`)}
+    <div id="_rpreview" style="margin-top:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px"></div>
+    <div class="form-actions">
+      <button class="btn btn-green" onclick="_saveUser(${u.id||''})">💾 حفظ</button>
+      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+    </div>`;
+}
+
+function _previewRole(k){
+  const r=_ROLES[k],el=document.getElementById('_rpreview');
+  if(!r||!el)return;
+  el.innerHTML=`<strong style="color:${r.color}">${r.icon} ${r.label}</strong><br>
+    <span style="color:var(--muted)">${r.all?'وصول كامل لجميع الموديولات':(r.pages||[]).join(' • ')}</span>`;
+}
+
+function _addUser(){
+  showModal(modal('➕ مستخدم جديد',_userFormHTML()));
+  setTimeout(()=>_previewRole('sales'),100);
+}
+function _editUser(id){
+  const u=getById('appUsers',id);if(!u)return;
+  showModal(modal('تعديل بيانات المستخدم',_userFormHTML(u)));
+  setTimeout(()=>_previewRole(u.role),100);
+}
+function _toggleUser(id){
+  const u=getById('appUsers',id);if(!u)return;
+  update('appUsers',id,{active:u.active===false});
+  go('users');
+}
+function _saveUser(id){
+  const uname=(document.getElementById('_uu')?.value||'').trim();
+  const uname_full=(document.getElementById('_un')?.value||'').trim();
+  const pass=document.getElementById('_up')?.value||'';
+  const pass2=document.getElementById('_up2')?.value||'';
+  const role=document.getElementById('_ur')?.value||'viewer';
+  if(!uname||!uname_full){alert('يرجى تعبئة اسم الدخول والاسم الكامل');return;}
+  if(!id&&!pass){alert('يرجى إدخال كلمة المرور');return;}
+  if(pass&&pass!==pass2){alert('كلمة المرور غير متطابقة');return;}
+  if(pass&&pass.length<6){alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');return;}
+  const dup=getAll('appUsers').find(x=>x.username===uname&&(!id||x.id!==id));
+  if(dup){alert('اسم الدخول موجود بالفعل، اختر اسماً آخر');return;}
+  const d={username:uname,name:uname_full,role,active:true};
+  if(pass)d.password=_authHash(pass);
+  id?update('appUsers',id,d):insert('appUsers',d);
+  closeModal();go('users');
+}
 
 // renderNav/go called by coEnter() after company is selected
 
